@@ -1,0 +1,138 @@
+/* Автокернер, веб-версия. Всё — внутри #ak-app: страница сайта и её
+   виджеты стилями не задеваются. Кнопки — цветом кнопок сайта. */
+#ak-app {
+  --ak-accent: var(--color-btn-bg, #96E354);
+  --ak-accent-hover: #85d343;
+  --ak-ink: #20241F;
+  --ak-muted: #6B6E73;
+  --ak-line: #E2E4E1;
+  --ak-soft: #F4F5F3;
+  --ak-blue: #2B2FE6;
+  --ak-red: #D93A26;
+  box-sizing: border-box;
+  /* шире колонки текста статьи (около 75 знаков): во всю страницу до 1280px,
+     по центру страницы, с полями 16px — без transform, чтобы текст не мылился */
+  width: min(1280px, calc(100vw - 32px));
+  margin: 0 0 0 calc(50% - min(640px, 50vw - 16px));
+  padding: 8px 0 48px;
+  color: var(--ak-ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: left;
+  /* статья включает автоперенос (lang="ru") — в подписях инструмента он не нужен */
+  -webkit-hyphens: manual;
+  hyphens: manual;
+}
+#ak-app *, #ak-app *::before, #ak-app *::after { box-sizing: border-box; }
+#ak-app p { margin: 0; }
+#ak-app button, #ak-app input, #ak-app select { font: inherit; color: inherit; }
+#ak-app .ak-hidden { display: none !important; }
+#ak-app .ak-muted { color: var(--ak-muted); }
+#ak-app .ak-num { font-variant-numeric: tabular-nums; }
+
+/* кнопки — как у остальных инструментов сайта */
+#ak-app .ak-btn {
+  -webkit-appearance: none; appearance: none; border: 0; border-radius: 2px; cursor: pointer;
+  background: var(--ak-accent); color: var(--ak-ink);
+  padding: 10px 14px; font-size: 14px; line-height: 1.1; white-space: nowrap;
+  transition: background .2s, transform .2s;
+}
+#ak-app .ak-btn:hover { background: var(--ak-accent-hover); transform: translateY(-1px); }
+#ak-app .ak-btn:active { transform: translateY(1px); }
+#ak-app .ak-btn[disabled] { opacity: .45; cursor: not-allowed; transform: none; }
+#ak-app .ak-btn.ak-quiet { background: var(--ak-soft); }
+#ak-app .ak-btn.ak-quiet:hover { background: #E8EAE6; }
+#ak-app .ak-btn.ak-wide { width: 100%; padding: 13px 14px; font-size: 15px; }
+
+/* поле для файла */
+#ak-app .ak-drop {
+  border: 2px dashed #C8CCC6; border-radius: 6px; padding: 48px 24px; text-align: center;
+  transition: border-color .2s, background .2s;
+}
+#ak-app .ak-drop.ak-over { border-color: var(--ak-accent); background: #F6FBF0; }
+#ak-app .ak-drop .ak-h3 { font-size: 22px; font-weight: 600; margin-bottom: 14px; }
+#ak-app .ak-drop .ak-or { margin: 0 10px; color: var(--ak-muted); }
+#ak-app .ak-drop .ak-note { margin: 18px auto 0; max-width: 560px; color: var(--ak-muted); font-size: 14px; text-wrap: balance; }
+#ak-app .ak-engine { margin-top: 12px; font-size: 13px; color: var(--ak-muted); min-height: 19px; text-align: center; }
+#ak-app .ak-error { color: var(--ak-red); }
+
+/* шрифт */
+#ak-app .ak-font {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 16px 20px; background: var(--ak-soft); border-radius: 6px; margin-bottom: 24px;
+}
+#ak-app .ak-font b { font-size: 20px; font-weight: 600; }
+#ak-app .ak-font .ak-meta { color: var(--ak-muted); font-size: 14px; margin-top: 2px; }
+#ak-app .ak-font .ak-btn.ak-quiet { background: #fff; }
+#ak-app .ak-font .ak-btn.ak-quiet:hover { background: #fff; box-shadow: 0 0 0 1px var(--ak-line); }
+
+/* настройки и итог */
+#ak-app .ak-main { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 900px) { #ak-app .ak-main { grid-template-columns: minmax(0, 1fr); } }
+#ak-app .ak-side { display: block; }
+#ak-app .ak-side .ak-sec { padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--ak-line); }
+#ak-app .ak-side .ak-h4 { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+#ak-app .ak-check { display: flex; gap: 9px; align-items: flex-start; margin: 7px 0; cursor: pointer; }
+#ak-app .ak-check input { margin-top: 3px; accent-color: var(--ak-ink); flex: none; }
+#ak-app .ak-sub { margin: 6px 0 0 24px; }
+#ak-app .ak-sub .ak-hint { font-size: 13px; color: var(--ak-muted); margin-top: 4px; text-wrap: pretty; }
+#ak-app select, #ak-app input[type=number], #ak-app input[type=text], #ak-app input[type=search] {
+  width: 100%; border: 1px solid var(--ak-line); border-radius: 2px; background: #fff; padding: 8px 10px; font-size: 14px;
+}
+#ak-app .ak-preset-note { font-size: 13px; color: var(--ak-muted); margin-top: 6px; text-wrap: pretty; }
+#ak-app details { margin-top: 12px; }
+#ak-app summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+#ak-app .ak-fine { margin-top: 10px; }
+#ak-app .ak-fine .ak-h5 { font-size: 13px; font-weight: 600; margin: 14px 0 6px; color: var(--ak-muted); text-transform: uppercase; letter-spacing: .04em; }
+#ak-app .ak-row { display: grid; grid-template-columns: 1fr 132px; gap: 10px; align-items: center; margin: 6px 0; font-size: 14px; }
+#ak-app .ak-row select, #ak-app .ak-row input { padding: 6px 8px; }
+/* над нижней панелью сайта на телефоне (её высота — --sp-mbar-h), на десктопе её нет */
+#ak-app .ak-run { position: sticky; bottom: var(--sp-mbar-h, 0px); background: #fff; padding: 12px 0 4px; z-index: 1; }
+#ak-app .ak-status { font-size: 13px; color: var(--ak-muted); margin-top: 10px; min-height: 19px; }
+#ak-app .ak-bar { height: 4px; background: var(--ak-soft); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+#ak-app .ak-bar i { display: block; height: 100%; width: 0; background: var(--ak-ink); transition: width .25s; }
+
+#ak-app .ak-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ak-line); margin-bottom: 20px; flex-wrap: wrap; }
+#ak-app .ak-tab {
+  -webkit-appearance: none; appearance: none; border: 0; background: none; padding: 10px 14px; cursor: pointer; font-size: 15px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--ak-muted);
+}
+#ak-app .ak-tab.ak-on { color: var(--ak-ink); border-bottom-color: var(--ak-ink); font-weight: 600; }
+#ak-app .ak-get { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+#ak-app .ak-empty { color: var(--ak-muted); padding: 40px 0; text-align: center; }
+
+#ak-app .ak-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 22px; }
+@media (max-width: 640px) { #ak-app .ak-cards { grid-template-columns: minmax(0, 1fr); } }
+#ak-app .ak-card { background: var(--ak-soft); border-radius: 6px; padding: 14px 16px; }
+#ak-app .ak-card small { display: block; font-size: 13px; color: var(--ak-muted); }
+#ak-app .ak-card strong { display: block; font-size: 26px; font-weight: 600; line-height: 1.2; margin: 4px 0; }
+#ak-app .ak-card span { font-size: 13px; color: var(--ak-muted); text-wrap: pretty; }
+#ak-app .ak-ok { padding: 12px 16px; border-radius: 6px; background: #F1F9E8; margin-bottom: 18px; font-size: 14px; }
+#ak-app .ak-warn { padding: 12px 16px; border-radius: 6px; background: #FDF0EC; margin-bottom: 18px; font-size: 14px; }
+
+#ak-app table { border-collapse: collapse; width: 100%; font-size: 14px; }
+#ak-app th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ak-muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--ak-line); }
+#ak-app td { padding: 5px 10px 5px 0; border-bottom: 1px solid #F0F1EF; font-variant-numeric: tabular-nums; }
+#ak-app td.ak-g { font-size: 18px; width: 52px; }
+#ak-app td.ak-name { color: var(--ak-muted); font-size: 13px; }
+#ak-app .ak-h { font-size: 15px; font-weight: 600; margin: 4px 0 10px; }
+
+#ak-app .ak-prev-tools { display: grid; grid-template-columns: minmax(0, 1fr) 190px auto; gap: 12px; align-items: center; margin-bottom: 16px; }
+@media (max-width: 640px) { #ak-app .ak-prev-tools { grid-template-columns: minmax(0, 1fr); } }
+#ak-app .ak-prev-tools label { display: flex; gap: 8px; align-items: center; font-size: 14px; white-space: nowrap; }
+#ak-app .ak-prev-tools input[type=range] { width: 100%; accent-color: var(--ak-ink); }
+#ak-app .ak-lines { border: 1px solid var(--ak-line); border-radius: 6px; padding: 8px 20px; overflow-x: auto; }
+#ak-app .ak-line { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: baseline; padding: 10px 0; }
+#ak-app .ak-line + .ak-line { border-top: 1px solid #F0F1EF; }
+#ak-app .ak-line small { font-size: 13px; color: var(--ak-muted); }
+#ak-app .ak-line div { white-space: pre; line-height: 1.25; }
+#ak-app .ak-line .ak-c { color: var(--ak-blue); }
+#ak-app .ak-hint2 { font-size: 13px; color: var(--ak-muted); margin-top: 10px; text-wrap: pretty; }
+
+#ak-app .ak-edits { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; margin-top: 14px; }
+@media (max-width: 760px) { #ak-app .ak-edits { grid-template-columns: minmax(0, 1fr); } }
+#ak-app .ak-scroll { max-height: 520px; overflow: auto; }
+
+#ak-app .ak-foot { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--ak-line); font-size: 13px; color: var(--ak-muted); text-wrap: pretty; }
+#ak-app .ak-foot a { color: inherit; }
