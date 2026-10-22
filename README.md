@@ -4,6 +4,8 @@ Spacing and kerning for FontLab 8, on all masters in one run.
 
 [Русская версия](README.ru.md)
 
+![Autokerner](docs/images/00-cover.png)
+
 Autokerner is a free, open-source script for FontLab 8. It sets the
 sidebearings, the word space and the kerning (classes and exception pairs) of
 a whole font, on every master at once, with one set of kerning classes shared
@@ -11,6 +13,8 @@ by all masters, as a variable font needs. Nothing is written until you have
 seen the result and pressed **Apply**, and the last write can be reverted.
 
 ## What it does
+
+![Spacing, word space and kerning, measured from the outline](docs/images/01-what-it-does.png)
 
 - **Spacing.** Each glyph is measured by the area of white at its left and
   right edges, within the height band of its group (lowercase, uppercase,
@@ -42,6 +46,36 @@ The spacing and kerning rules are ported to Python from another program by
 the author; with the window's corrections switched off, the numbers match it
 to the unit on the test fonts, including a variable font with nine masters.
 
+## Results
+
+Before and after on real fonts: a text face, a slab display face, a text serif
+and an art deco display face. Red marks what was off before the run.
+
+![A text face, before and after](docs/images/08-drafting-forum.png)
+
+![A slab display face, before and after](docs/images/09-drafting-kelly-slab.png)
+
+![A text serif, before and after](docs/images/10-drafting-ledger.png)
+
+![An art deco display face, before and after](docs/images/11-drafting-poiret-one.png)
+
+Every pair of a line against a tolerance, and all frequent pairs of the font at once:
+
+![Every pair against a tolerance](docs/images/12-tolerance-forum.png)
+
+![All frequent pairs at once](docs/images/13-swarm-forum.png)
+
+The author's fonts: a pangram before and after, a poster, and a display face
+kerned by hand next to the same face kerned by the script from zero:
+
+![A pangram before and after](docs/images/14-tsvik.png)
+
+![A poster, before and after](docs/images/15-razluka-poster.png)
+
+![Kerned by hand and by the script](docs/images/16-razluka-hand-and-script.png)
+
+![Before, by hand, by the script](docs/images/17-razluka-motion.gif)
+
 ## Web version
 
 The same calculation runs in the browser, on the author's site:
@@ -53,6 +87,8 @@ version writes the sidebearings, the word space and a new `kern` lookup into
 the file, moves mark anchors with their glyphs, reads the new file back and
 checks it against the calculation; the other tables stay as they were.
 Variable fonts and fonts with several masters need the FontLab script.
+
+![The web version](docs/images/18-web-version.png)
 
 ## Requirements
 
@@ -71,7 +107,11 @@ needed.
 3. Choose **Scripts → Refresh Scripts**. **Autokerner** appears in the
    Scripts menu.
 
+![Install and use in five steps](docs/images/03-how-to-use.png)
+
 ## Use
+
+![The Autokerner window](docs/images/02-window.png)
 
 1. Open a font and choose **Scripts → Autokerner**. The window is in Russian
    if your system language is Russian and in English otherwise. It floats next
@@ -108,6 +148,14 @@ needed.
 
 Settings are remembered between runs. **Stop** interrupts a long calculation
 without changing the font.
+
+![What to choose: presets, glyphs, word space, fine-tuning](docs/images/04-what-to-choose.png)
+
+![Preview: your own text now and after](docs/images/05-preview.png)
+
+![Edits: every change, with a way to say no](docs/images/06-edits.png)
+
+![Window or panel, Apply and Revert](docs/images/07-panel-apply-revert.png)
 
 ## When to use it, and when not
 
