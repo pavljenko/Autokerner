@@ -138,15 +138,18 @@ class FontSource:
     # ── слои ──
 
     def _flglyph(self, имя):
+        """flGlyph знака; знака нет в шрифте (компонент ссылается на
+        удалённый знак) — None"""
         fl, _ = _api()
-        g = self._glyphs.get(имя)
-        if g is None:
-            g = fl.flGlyph(self.font[имя], self.font)
-            self._glyphs[имя] = g
-        return g
+        if имя not in self._glyphs:
+            g = self.font[имя]
+            self._glyphs[имя] = fl.flGlyph(g, self.font) if g is not None else None
+        return self._glyphs[имя]
 
     def layer(self, имя, master):
         flg = self._flglyph(имя)
+        if flg is None:
+            return None
         слой = flg.getLayerByName(master)
         if слой is None:
             for л in flg.layers:
@@ -171,8 +174,11 @@ class FontSource:
                     свои = self._drawn(база, master, память, глубина + 1)[0]
                 else:
                     перо = _Pen()
-                    for контур in фигура.getContours():
-                        контур.draw(перо)
+                    # FontLab отдаёт None вместо контура у фигур без рисунка
+                    # (сообщение на TypeDrawers 23.10.2026): их пропускаем
+                    for контур in фигура.getContours() or ():
+                        if контур is not None:
+                            контур.draw(перо)
                     свои = перо.commands
                 команды += _transform(свои, _matrix(фигура.transform))
         память[ключ] = (команды, компоненты)
