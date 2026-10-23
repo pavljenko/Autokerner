@@ -148,3 +148,105 @@ class KernValuesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OpticalSpacingTest(unittest.TestCase):
+    """Мягкий замер белого у края (`white_soft`, задачи #1, #2)"""
+
+    def белое(self, контуры, ширина):
+        from autokerner.geometry import ink_profile
+        from autokerner.model import Glyph
+        from autokerner.spacing import SpacingRule, white, white_soft
+        профиль = ink_profile(Glyph("a", [], ширина, контуры).edges, 0, 700, 1000 / 256)
+        return white(профиль, ширина, 70)[1], white_soft(профиль, ширина, SpacingRule(soft=True), 1000)[1]
+
+    def test_plain_stem_same_as_hard(self):
+        from tests.synthetic import прямоугольник
+        жёстко, мягко = self.белое([прямоугольник(50, -20, 130, 720)], 180)
+        self.assertAlmostEqual(жёстко, мягко, places=6)
+
+    def test_white_behind_serif_counts_less(self):
+        from tests.synthetic import прямоугольник
+        I = [прямоугольник(110, 0, 190, 700), прямоугольник(50, 0, 250, 40), прямоугольник(50, 660, 250, 700)]
+        жёстко, мягко = self.белое(I, 300)
+        self.assertLess(мягко, жёстко)
+
+    def test_deep_open_side_counts_more(self):
+        from tests.synthetic import прямоугольник
+        скобка = [прямоугольник(50, 0, 130, 700), прямоугольник(50, 0, 400, 60), прямоугольник(50, 640, 400, 700)]
+        жёстко, мягко = self.белое(скобка, 450)
+        self.assertGreater(мягко, жёстко)
+
+    def мягко(self, контуры, ширина, вес):
+        from autokerner.geometry import ink_profile
+        from autokerner.model import Glyph
+        from autokerner.spacing import SpacingRule, white_soft
+        профиль = ink_profile(Glyph("a", [], ширина, контуры).edges, 0, 700, 1000 / 256)
+        return white_soft(профиль, ширина, SpacingRule(soft=True, serif_weight=вес), 1000)
+
+    def test_short_serif_weighs_less(self):
+        from tests.synthetic import прямоугольник
+        I = [прямоугольник(110, 0, 190, 700), прямоугольник(50, 0, 250, 40), прямоугольник(50, 660, 250, 700)]
+        self.assertLess(self.мягко(I, 300, 0.75)[1], self.мягко(I, 300, 1.0)[1])
+
+    def test_diagonal_and_long_arm_are_not_serifs(self):
+        from autokerner.geometry import Contour
+        from tests.synthetic import прямоугольник
+        диагональ = [Contour([("moveTo", (50, 0)), ("lineTo", (130, 0)), ("lineTo", (330, 700)),
+                               ("lineTo", (250, 700)), ("closePath",)])]
+        T = [прямоугольник(260, 0, 340, 700), прямоугольник(10, 640, 590, 700)]
+        for контуры, ширина in ((диагональ, 380), (T, 600)):
+            self.assertEqual(self.мягко(контуры, ширина, 0.75), self.мягко(контуры, ширина, 1.0))
+
+    def test_classic_keeps_hard_rule(self):
+        self.assertFalse(Options.classic().spacing_rule().soft)
+        self.assertTrue(Options().spacing_rule().soft)
+
+
+class LowerOverhangTest(unittest.TestCase):
+    """Хвостик строчной над строчной кармана не образует (задача #3)"""
+
+    def мастер_с_f(self):
+        from autokerner.model import Glyph, Master
+        from tests.synthetic import прямоугольник
+        m = мастер()
+        f = Glyph("f", [0x66], 380, [прямоугольник(60, 0, 140, 760), прямоугольник(60, 700, 360, 760),
+                                      прямоугольник(20, 440, 170, 500)])
+        f_alt = Glyph("f.ss01", [], 380, list(f.contours))
+        return Master(1000, list(m.glyphs) + [f, f_alt], x_height=500, cap_height=700, label="с f")
+
+    def значение(self, m, law, a, b):
+        мат = kerning.make_matrix(m, law)
+        i, j = мат.names.index(a), мат.names.index(b)
+        return мат.values[i * мат.n + j]
+
+    def test_hook_over_lowercase_is_not_kerned(self):
+        m = self.мастер_с_f()
+        self.assertLess(self.значение(m, Options.classic().kern_law(), "f", "o"), 0)
+        self.assertEqual(self.значение(m, Options().kern_law(), "f", "o"), 0)
+        self.assertEqual(self.значение(m, Options().kern_law(), "f.ss01", "o"), 0)
+        # прописная над строчной — как прежде
+        self.assertEqual(self.значение(m, Options().kern_law(), "T", "o"),
+                         self.значение(m, Options.classic().kern_law(), "T", "o"))
+
+    def test_fast_loop_matches_kernel(self):
+        m = self.мастер_с_f()
+        law = Options().kern_law()
+        мат = kerning.make_matrix(m, law)
+        grid, рост = kerning.Grid(m.upm), kerning.x_height_of(m)
+        формы = {}
+        for имя in мат.names:
+            i = m.by_name(имя)
+            ф = kerning.make_shape(m.glyphs[i].edges, m.advance(i), grid, рост, law)
+            коды = m.codes_by_glyph.get(i)
+            ф.lower = kerning._lower_letter(m, min(коды) if коды else kerning.MAXCODE, имя)
+            формы[имя] = ф
+        ctx = kerning.make_context(m, grid, рост, law, lambda i: формы[m.name(i)])
+        for a in ("f", "f.ss01", "n", "o", "T", "u"):
+            for b in ("o", "n", "u", "x", "f"):
+                л, п = формы[a], формы[b]
+                вид = kerning.pair_kind(л.kind, п.kind)
+                часть = law.part(вид)
+                k, _ = kerning.kernel(л, п, часть, law.slopes.index(часть.slope),
+                                      kerning.floor_of(вид, ctx.neutral_pocket), law, m.upm, ctx.usual_gap)
+                self.assertEqual(мат.values[мат.names.index(a) * мат.n + мат.names.index(b)], k, a + b)

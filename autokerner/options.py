@@ -54,13 +54,16 @@ class Options:
     kern_neutral = NEUTRAL_MEDIAN  # обычный карман шрифта — медиана пар-образцов
     kern_marks_apart = True      # кавычка и запятая не заходят друг под друга
     kern_skip_nontext = True     # метки, отдельные акценты и «_» не кернятся
+    spacing_optical = True       # белое у края — мягко, с укрытием (задачи #1, #2)
+    kern_lower_overhang = True   # хвостик f над строчной не кернится (задача #3)
     kern_mode = REPLACE          # REPLACE — заменить целиком; MERGE — дописать к своему
 
     FIELDS = ("spacing", "space", "kerning", "glyphs", "keep_marked", "keep_metric_keys",
               "nbsp_follows_space", "masters", "looseness", "spacing_threshold", "word_gap",
               "kern_strength", "kern_threshold", "kern_clearance", "kern_precision", "kern_limit",
               "kern_round", "kern_max_tight", "kern_figures", "kern_mode", "space_edge",
-              "kern_neutral", "kern_marks_apart", "kern_max_loose", "kern_skip_nontext")
+              "kern_neutral", "kern_marks_apart", "kern_max_loose", "kern_skip_nontext",
+              "spacing_optical", "kern_lower_overhang")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -97,14 +100,14 @@ class Options:
         """Исходное правило без поправок окна — для сверки с исходным расчётом"""
         o = cls(kern_figures=FIGURES_RULE, space_edge=False, kern_neutral=NEUTRAL_MAX,
                 nbsp_follows_space=False, kern_marks_apart=False, kern_max_loose=0,
-                kern_skip_nontext=False)
+                kern_skip_nontext=False, spacing_optical=False, kern_lower_overhang=False)
         for k, v in kw.items():
             setattr(o, k, v)
         return o
 
     def spacing_rule(self):
         return SpacingRule(threshold=self.spacing_threshold, word_gap=self.word_gap / 100.0,
-                           word_gap_edge=bool(self.space_edge))
+                           word_gap_edge=bool(self.space_edge), soft=bool(self.spacing_optical))
 
     def kern_rule(self):
         return KernRule(threshold=self.kern_threshold, visible=self.kern_precision,
@@ -114,7 +117,8 @@ class Options:
         return KernLaw(threshold=self.kern_threshold, strength=self.kern_strength / 100.0,
                        clearance=self.kern_clearance, figures=self.kern_figures,
                        neutral=self.kern_neutral, marks_apart=bool(self.kern_marks_apart),
-                       skip_nontext=bool(self.kern_skip_nontext))
+                       skip_nontext=bool(self.kern_skip_nontext),
+                       lower_overhang=bool(self.kern_lower_overhang))
 
     def is_default_rule(self):
         """Числа правила — как по умолчанию (поправки окна не в счёт)"""

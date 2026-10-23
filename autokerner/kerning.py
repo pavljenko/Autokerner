@@ -19,7 +19,7 @@ from struct import Struct
 
 from .geometry import INF, INT16_MAX, clamp16, contours_rect, f32, ink_profile, irnd, median
 from .spacing import SpacingRule, base_body, heights, is_digit_name, is_number_code, stem_sides
-from .unicode_props import is_nontext
+from .unicode_props import is_letter, is_lowercase, is_nontext
 
 LETTER, LOW, HIGH, MIDDLE = 0, 1, 2, 3
 KINDS = (LETTER, LOW, HIGH, MIDDLE)
@@ -46,7 +46,7 @@ class KernLaw:
     тысячных кегля"""
 
     def __init__(self, threshold=10, strength=1.0, clearance=25, figures=FIGURES_RULE,
-                 neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False):
+                 neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False, lower_overhang=False):
         self.letters = LawPart(0.45, 40, 3)
         self.low = LawPart(0.40, 0, 1)
         self.high = LawPart(0.48, 0, 1)
@@ -68,6 +68,8 @@ class KernLaw:
         self.marks_apart = marks_apart
         # метки, отдельные акценты и «_» не кернятся (`nontext_glyphs`)
         self.skip_nontext = skip_nontext
+        # хвостик строчной над строчной кармана не образует (`overhang_cut`)
+        self.lower_overhang = lower_overhang
 
     def part(self, kind):
         return (self.letters, self.low, self.high, self.middle)[kind]
@@ -165,7 +167,7 @@ class KernShape:
     """Знак глазами кернинга: края чернил на каждой высоте сетки и тени
     выступов на каждый наклон закона"""
     __slots__ = ("advance", "kind", "left", "right", "L", "R", "SL", "SR", "rows",
-                 "ink_low", "ink_high")
+                 "ink_low", "ink_high", "step", "lower", "cuts")
 
 
 def make_shape(edges, advance, grid, рост, law):
@@ -206,6 +208,9 @@ def make_shape(edges, advance, grid, рост, law):
     s.rows = len(слева)
     s.ink_low = первая
     s.ink_high = последняя
+    s.step = grid.step
+    s.lower = False
+    s.cuts = None
     return s
 
 
@@ -223,6 +228,59 @@ def empty_shape(like):
     s.SR = [[-INF] * like.rows for _ in like.SR]
     s.ink_low = 0
     s.ink_high = like.rows - 1
+    s.step = like.step
+    s.lower = False
+    s.cuts = None
+    return s
+
+
+# Запас над верхом правой строчной, выше которого чернила левой кармана не
+# образуют: 5 % кегля на сетке в двухсотую
+OVERHANG_ROWS = 10
+
+
+def overhang_cut(л, п, law):
+    """Левый знак для закона кармана (поправка окна, вне исходного правила;
+    задача #3 на GitHub). В паре двух строчных чернила левой выше верха
+    правой (с запасом 5 % кегля) кармана не образуют: хвостик f над o, e, a
+    глаз видит отдельно от просвета между буквами, а закон закрывал карман
+    под ним, как под перекладиной T, и fo, fe, fa сходились. У 8 из 10
+    хорошо кернённых шрифтов эти пары — ноль, у правила было −9…−84 тысячных
+    (замер 23.10.2026). Прописная над строчной (To, Го, Fo) — как прежде.
+    Сторож зазора меряет по настоящим краям: выше верха правой он и так не
+    смотрит"""
+    if not (л.lower and п.lower and getattr(law, "lower_overhang", False)):
+        return л
+    предел = п.ink_high + OVERHANG_ROWS
+    if л.ink_high <= предел:
+        return л
+    if л.cuts is None:
+        л.cuts = {}
+    s = л.cuts.get(предел)
+    if s is None:
+        s = л.cuts[предел] = _cut(л, предел, law.slopes)
+    return s
+
+
+def _cut(л, предел, наклоны):
+    справа = [x if i <= предел else -INF for i, x in enumerate(л.R)]
+    if max(справа) == -INF:
+        return л
+    s = KernShape()
+    s.advance = л.advance
+    s.kind = л.kind
+    s.left = л.left
+    s.right = max(справа)
+    s.L = л.L
+    s.R = справа
+    s.SL = л.SL
+    s.SR = [_f32_list(_shadow(справа, наклон, л.step, False)) for наклон in наклоны]
+    s.rows = л.rows
+    s.ink_low = л.ink_low
+    s.ink_high = предел
+    s.step = л.step
+    s.lower = True
+    s.cuts = None
     return s
 
 
@@ -290,7 +348,7 @@ def kernel(л, п, часть, номер, пол, law, upm, обычный, з�
     """Ядро меры: (число, запас до зазора). `закон` — закон кармана, уже
     посчитанный по телу основы"""
     тысячная = float(upm) / 1000
-    k = закон if закон is not None else law_value(л, п, часть, номер, пол, upm)
+    k = закон if закон is not None else law_value(overhang_cut(л, п, law), п, часть, номер, пол, upm)
     if k is None:
         return (0, INT16_MAX)
     сырое = л.advance + closest(л.R, п.L, max(л.ink_low, п.ink_low), min(л.ink_high, п.ink_high))
@@ -451,6 +509,21 @@ def matrix_names(master, law):
     return вышло
 
 
+def _lower_letter(master, код, имя):
+    """Строчная буква: по коду, у знака без кода — по имени основы
+    («f.ss01», «f_f»)"""
+    if код != MAXCODE:
+        return is_letter(код) and is_lowercase(код)
+    коды = master.codes_by_glyph
+    куски = [к for к in имя.split(".")[0].split("_") if к]
+    for к in куски:
+        i = master.by_name(к)
+        к_код = min(коды[i]) if i is not None and i in коды else _code_in_name(к)
+        if к_код is None or not (is_letter(к_код) and is_lowercase(к_код)):
+            return False
+    return bool(куски)
+
+
 def make_matrix(master, law, names=None, progress=None):
     """Матрица всех пар мастера. `names` — общий
     список знаков на все мастера; знак без формы на этом мастере — пустой"""
@@ -480,6 +553,8 @@ def make_matrix(master, law, names=None, progress=None):
         скодом.append(код != MAXCODE)
         коды.append(код)
         знаки.append(форма)
+        if getattr(law, "lower_overhang", False):
+            форма.lower = _lower_letter(master, код, имя)
         цифра = код != MAXCODE and is_number_code(код)
         цифры.append(цифра or is_digit_name(имя))
     n = len(знаки)
@@ -551,6 +626,7 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
     род = [[pair_kind(a, b) for b in KINDS] for a in KINDS]
     законы = [(ч.share, ч.dead_zone, номер) for ч, номер in части]
     формы = [(ф.kind, ф.ink_low, ф.ink_high, ф.L, ф.SL, ф.left) for ф in знаки]
+    строчные = [ф.lower for ф in знаки] if getattr(law, "lower_overhang", False) else None
     законы_основ = {}
     for л in range(n):
         if progress and л % 32 == 0:
@@ -564,6 +640,7 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
         R_л, SR_л = фл.R, фл.SR
         ширина = фл.advance
         габарит_л = ширина - фл.right
+        срезать = строчные is not None and строчные[л]
         строка = л * n
         for п in range(n):
             if цифра_л and цифры[п]:
@@ -583,21 +660,27 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
                 else:
                     вид = род[знаки[а].kind][знаки[б].kind]
                     частьО, номерО = части[вид]
-                    k = law_value(знаки[а], знаки[б], частьО, номерО, полы[вид], upm)
+                    k = law_value(overhang_cut(знаки[а], знаки[б], law), знаки[б], частьО, номерО,
+                                  полы[вид], upm)
                     законы_основ[ключ] = k
                 if k is not None:
                     k = k + поправки[л * 2] + поправки[п * 2 + 1]
             if k is None:
                 # закон кармана (`law_value`)
                 доля, мёртвая, номер = законы[вид_пары]
+                SR, габарит, верх = SR_л[номер], габарит_л, верх_л
+                if срезать and строчные[п] and верх_л > верх_п + OVERHANG_ROWS:
+                    # хвостик строчной над строчной (`overhang_cut`)
+                    ф = overhang_cut(фл, знаки[п], law)
+                    SR, габарит, верх = ф.SR[номер], ширина - ф.right, ф.ink_high
                 от = низ_л if низ_л < низ_п else низ_п
-                до = верх_л if верх_л > верх_п else верх_п
-                m = min(map(sub, SL_п[номер][от:до + 1], SR_л[номер][от:до + 1]))
+                до = верх if верх > верх_п else верх_п
+                m = min(map(sub, SL_п[номер][от:до + 1], SR[от:до + 1]))
                 if m == INF:
                     k = None
                 else:
                     сТенью = ширина + unpack(pack(m))[0]
-                    карман = max(0, сТенью - (габарит_л + левый_п)) / тысячная
+                    карман = max(0, сТенью - (габарит + левый_п)) / тысячная
                     сверх = max(0, карман - мёртвая)
                     пол = полы[вид_пары]
                     if пол > мёртвая:

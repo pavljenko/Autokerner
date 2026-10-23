@@ -18,8 +18,10 @@ seen the result and pressed **Apply**, and the last write can be reverted.
 
 - **Spacing.** Each glyph is measured by the area of white at its left and
   right edges, within the height band of its group (lowercase, uppercase,
-  small caps), and compared with the median of the same font. Only glyphs
-  that stand out from their own family are changed, so the font keeps its
+  small caps), and compared with the median of the same font. White right at
+  the edge counts in full, deeper white counts less and less, white sheltered
+  behind a crossbar or an arm counts little, and the white between the tip of a
+  short serif and its stem counts three quarters, much as the eye sees it. Only glyphs that stand out from their own family are changed, so the font keeps its
   overall looseness or tightness. Accented letters follow their base letter,
   composites move with their base, punctuation is spaced against the stem of a
   straight letter. A word space that is much wider than the rule is narrowed
@@ -29,7 +31,9 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   overhangs) is than the gap between their bounding boxes. A share of the
   pocket is closed; the share differs for letters and for low, high and middle
   marks. Pockets no deeper than the font's usual one (the median of model
-  pairs such as HO and no) are left alone. Outlines never come closer than
+  pairs such as HO and no) are left alone. In a pair of two lowercase letters,
+  the part of the left letter that rises above the right one, such as the hook
+  of f over o, makes no pocket. Outlines never come closer than
   2.5% of the em. Figures never run into each other across `, . :`
   (7,4 · 3.5 · 12:30), and marks at different heights, such as a quote and a
   comma, are not moved under each other. Combining marks, standalone accents
@@ -164,10 +168,11 @@ early versions, fonts with partial or missing kerning, a script added to an
 existing Latin (Cyrillic without kerning is a common case), or a quick first
 pass before manual work.
 
-- On fonts that are already carefully spaced, the rule tends to give letters
-  with open or diagonal sides (t, r, k, v, w, A, the ear of g) slightly more
-  space than designers usually do. For such fonts, calculate only the glyphs
-  you select, or use **add to it** for kerning.
+- On fonts that are already carefully spaced, the rule still moves some
+  letters: about a third of the Latin and Cyrillic letters of ten well-spaced
+  fonts, by about 2.5% of the em on average (both sides together). For such
+  fonts, calculate only the glyphs you select, or use **add to it** for
+  kerning.
 - The overall tightness of the font is kept. If you want the whole font
   tighter or looser, use the looseness setting or the Display preset.
 - Connecting scripts are not supported: changing sidebearings breaks the
