@@ -186,12 +186,21 @@ class FontSource:
 
     def master_heights(self, master):
         """Рост строчных и прописных мастера"""
+        return self._master_values(master)[:2]
+
+    def master_italic_angle(self, master):
+        """Угол наклона курсива мастера, как в post.italicAngle (−12 у
+        курсива с наклоном вправо); 0 — прямой"""
+        return self._master_values(master)[2]
+
+    def _master_values(self, master):
         p = self.package
         прежний = p.master
         try:
             if прежний != master:
                 p.setMaster(master)
-            return (p.xHeight_value or None, p.capsHeight_value or None)
+            return (p.xHeight_value or None, p.capsHeight_value or None,
+                    float(getattr(p, "italicAngle_value", 0.0) or 0.0))
         finally:
             if p.master != прежний:
                 p.setMaster(прежний)
@@ -284,9 +293,10 @@ class FontSource:
                 команды, компоненты = self._drawn(g.name, m, память)
                 набор.append(Glyph(g.name, коды, int(round(слой.advanceWidth)),
                                    split_contours(команды), компоненты))
-            рост, капитель = self.master_heights(m)
+            рост, капитель, наклон = self._master_values(m)
             мастера.append(Master(self.upm, набор, рост, капитель, label=m,
-                                  weight=float(номер_мастера), round_shifted=round_shifted))
+                                  weight=float(номер_мастера), round_shifted=round_shifted,
+                                  italic_angle=наклон))
         return мастера
 
     def fingerprint(self, masters=None):

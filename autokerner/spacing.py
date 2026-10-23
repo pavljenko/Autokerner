@@ -10,7 +10,7 @@
 
 import math
 
-from .geometry import INF, ink_profile, irnd, median, rnd
+from .geometry import INF, deskewed, ink_profile, irnd, median, rnd, slant_of
 from .unicode_props import base_code, is_letter, is_lowercase, is_uppercase, is_number
 
 LOWER, UPPER, SMALLCAP, OTHER = "lower", "upper", "smallCap", "other"
@@ -40,12 +40,25 @@ class SpacingRule:
     shelter_slope — наклон «конуса» видимости, shelter_weight — вес белого,
     укрытого выступом сверху или снизу; serif_weight — вес белого между
     концом короткой засечки и штамбом, serif_depth — наибольший вынос такой
-    засечки, serif_flat — допуск ровности штамба (доли кегля)."""
+    засечки, serif_flat — допуск ровности штамба (доли кегля).
+
+    robust_heights — сверять рост и капитель с медианой верхов букв
+    (`by_letters`, поправка окна, вне исходного правила).
+
+    slant — мерить курсив вдоль угла наклона (поправка окна, вне исходного
+    правила): профиль выпрямляется по `italic_angle` мастера.
+
+    cursive — у шрифта рукописного строения мерить белое за входом и
+    выходом строчных от тела стороны (`cursive_of`, поправка окна, вне
+    исходного правила): cursive_entry — вынос входа над телом, с которого
+    он входом считается (доля кегля), cursive_body — доля высоты стороны,
+    где ищется тело."""
 
     def __init__(self, depth=0.07, overshoot=0.0, threshold=12, word_gap=0.47,
                  word_gap_slack=0.25, word_gap_edge=False, soft=False, plateau=0.03, tail=0.07,
                  shelter_slope=1.0, shelter_weight=0.0, serif_weight=0.75, serif_depth=0.08,
-                 serif_flat=0.01):
+                 serif_flat=0.01, robust_heights=False, slant=False, cursive=False,
+                 cursive_entry=0.04, cursive_body=0.6):
         self.depth = depth
         self.overshoot = overshoot
         self.threshold = threshold
@@ -60,6 +73,11 @@ class SpacingRule:
         self.serif_weight = serif_weight
         self.serif_depth = serif_depth
         self.serif_flat = serif_flat
+        self.robust_heights = robust_heights
+        self.slant = slant
+        self.cursive = cursive
+        self.cursive_entry = cursive_entry
+        self.cursive_body = cursive_body
 
 
 class SpaceTarget:
@@ -154,9 +172,48 @@ def _letter_height(master, code):
     return r[3] - r[1]
 
 
-def heights(master):
+# буквы, что стоят верхом на росте строчных и на высоте прописных
+_НА_РОСТЕ = "xzvwunmrsнпимтшкгв"
+_НА_КАПИТЕЛИ = "HINEZTFLKXMНПИТЕШГЖКМ"
+
+
+def _median_top(master, буквы):
+    """Медиана верхов букв; меньше трёх букв с рисунком — None"""
+    from .geometry import contours_rect
+    верхи = []
+    for ch in буквы:
+        i = master.glyph(ord(ch))
+        if i is None:
+            continue
+        r = contours_rect(master.contours(i))
+        if r is not None:
+            верхи.append(r[3])
+    return median(верхи) if len(верхи) >= 3 else None
+
+
+def by_letters(master, капитель, рост):
+    """Поправка окна к высотам (вне исходного правила): высота, что
+    разошлась с медианой верхов букв больше допуска, заменяется медианой.
+    Исходное правило перемеряет рост по габариту одной «x», а у рукописных
+    и акцидентных шрифтов «x» бывает с росчерками вверх и вниз: у шрифта
+    в духе Конашевича габарит «x» — 671 при росте 433, и почти все строчные
+    оказывались «вне строки» и не мерились (сообщение на TypeDrawers,
+    23.10.2026). У обычных шрифтов медиана сходится с прежней высотой в
+    пределах допуска, и ничего не меняется"""
+    допуск = float(master.upm) * DECLARED_HEIGHT_TOLERANCE
+    мера = _median_top(master, _НА_КАПИТЕЛИ)
+    if мера is not None and abs(капитель - мера) > допуск:
+        капитель = мера
+    мера = _median_top(master, _НА_РОСТЕ)
+    if мера is not None and abs(рост - мера) > допуск:
+        рост = мера
+    return капитель, рост
+
+
+def heights(master, robust=False):
     """Капитель и рост строчных: объявленные, но перемеренные по «H» и «x»,
-    если разошлись с рисунком больше 6 % кегля.
+    если разошлись с рисунком больше 6 % кегля; `robust` — ещё и сверенные
+    с медианой верхов букв (`by_letters`).
     Ответ — (кегль, капитель, рост)"""
     upm = float(master.upm)
     допуск = upm * DECLARED_HEIGHT_TOLERANCE
@@ -168,9 +225,11 @@ def heights(master):
     мера = _letter_height(master, 0x78)
     if мера is not None and (рост is None or abs(рост - мера) > допуск):
         рост = мера
-    return (upm,
-            капитель if капитель is not None else upm * FALLBACK_CAP_HEIGHT,
-            рост if рост is not None else upm * FALLBACK_X_HEIGHT)
+    капитель = капитель if капитель is not None else upm * FALLBACK_CAP_HEIGHT
+    рост = рост if рост is not None else upm * FALLBACK_X_HEIGHT
+    if robust:
+        капитель, рост = by_letters(master, капитель, рост)
+    return (upm, капитель, рост)
 
 
 # ── отбор и группы ──
@@ -342,7 +401,7 @@ def white(профиль, advance, глубина):
     return (слева, справа, высота)
 
 
-def white_soft(профиль, advance, rule, upm):
+def white_soft(профиль, advance, rule, upm, entry=False):
     """Площадь белого слева и справа — мягко (поправка окна, вне исходного
     правила; задачи #1 и #2 на GitHub).
 
@@ -365,7 +424,11 @@ def white_soft(профиль, advance, rule, upm):
     Вес засечки 75 %, а не меньше: при 50 % узкий брусковый шрифт с короткими
     засечками выравнивается так же, но хорошо расставленные шрифты
     сдвигаются заметно больше (у одной из антикв — 43 буквы вместо 24; замеры
-    23.10.2026). Строка без чернил считается белой на всю глубину учёта"""
+    23.10.2026). `entry` — строчная шрифта рукописного строения
+    (`cursive_of`): если засечки нет, а слева вверху выступает вход (справа
+    внизу — выход), белое между его концом и телом стороны весит так же,
+    как за засечкой, а глубина дальше меряется от тела. Строка без чернил
+    считается белой на всю глубину учёта"""
     тело = _profile_body(профиль)
     if тело is None:
         return (0.0, 0.0, 0.0)
@@ -400,8 +463,10 @@ def white_soft(профиль, advance, rule, upm):
             return c
         return 0.0
 
-    def сторона(отступы):
+    def сторона(отступы, сверху):
         c = засечка(отступы)
+        if not c and entry:
+            c = body_behind_entry(отступы, rule.cursive_body, rule.cursive_entry * upm, сверху)
         if c:
             ядро = [d if d == INF else max(0.0, d - c) for d in отступы]
         else:
@@ -428,9 +493,57 @@ def white_soft(профиль, advance, rule, upm):
     левые = [INF if л is None else max(0.0, л - стенка_л) for л in профиль.left]
     правые = [INF if п is None else max(0.0, стенка_п - п) for п in профиль.right]
     высота = len(левые) * шаг
-    слева = стенка_л * высота + сторона(левые) * шаг
-    справа = (advance - стенка_п) * высота + сторона(правые) * шаг
+    слева = стенка_л * высота + сторона(левые, True) * шаг
+    справа = (advance - стенка_п) * высота + сторона(правые, False) * шаг
     return (слева, справа, высота)
+
+
+def body_behind_entry(отступы, доля, вынос, сверху):
+    """Глубина тела стороны за входом (вверху, `сверху`) или выходом (внизу):
+    тело — нижние `доля` высоты стороны (у выхода — верхние), вход — выступ
+    остальной части дальше тела не меньше чем на `вынос`; иначе 0"""
+    ряд = отступы if сверху else отступы[::-1]
+    граница = int(доля * len(ряд))
+    тело = [d for d in ряд[:граница] if d != INF]
+    вход = [d for d in ряд[граница:] if d != INF]
+    if not тело or not вход:
+        return 0.0
+    c = min(тело)
+    return c if c - min(вход) >= вынос else 0.0
+
+
+# Буквы со штамбом слева: по ним видно строение шрифта
+_ШТАМБОВЫЕ = "nmuirpинпшщцр"
+
+
+def cursive_of(master, рост, шаг, наклон=0.0, rule=None):
+    """Шрифт рукописного строения (поправка окна, вне исходного правила):
+    у строчных со штамбом слева (n, m, u, i, r, p, и, н, п, ш, щ, ц, р)
+    вверху выступает вход — крючок, дуга, — а низ без засечки. У прямых
+    засечка сверху и снизу одна (разница 0), у гротеска её нет; у десяти
+    курсивов вход выступает на 68–112 тысячных кегля, у рукописного
+    прямого шрифта — на 132 (замер 23.10.2026). Решает медиана разницы
+    «вход − низ» по буквам: не меньше `cursive_entry`"""
+    rule = rule or SpacingRule()
+    upm = float(master.upm)
+    разницы = []
+    for буква in _ШТАМБОВЫЕ:
+        i = master.glyph(ord(буква))
+        if i is None or master.component_bases(i):
+            continue
+        профиль = deskewed(ink_profile(master.glyphs[i].edges, 0.0, рост, шаг), наклон, рост / 2)
+        if профиль is None:
+            continue
+        левые = [INF if л is None else л for л in профиль.left]
+        n = len(левые)
+        середина = [d for d in левые[int(0.3 * n):int(0.7 * n) + 1] if d != INF]
+        if not середина:
+            continue
+        c = median(середина)
+        верх = min([d for d in левые[int(0.75 * n):] if d != INF] or [c])
+        низ = min([d for d in левые[:int(0.25 * n) + 1] if d != INF] or [c])
+        разницы.append((c - верх) - (c - низ))
+    return bool(разницы) and median(разницы) >= rule.cursive_entry * upm
 
 
 def _min_codes(master):
@@ -455,11 +568,16 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     не трогает: цель у них — нынешние поля, и их основа для диакритики,
     составных и знаков препинания тоже стоит на месте"""
     rule = rule or SpacingRule()
-    upm, капитель, рост = heights(master)
+    upm, капитель, рост = heights(master, rule.robust_heights)
     капитель = max(капитель, рост + 1)
     шаг = upm / 256
     глубина = rule.depth * upm
     выступ = rule.overshoot * рост
+    # курсив меряется вдоль наклона (`deskewed`): иначе его штамбы дают
+    # белое треугольниками, и стороны с наклоном выходят неровными
+    наклон = slant_of(getattr(master, "italic_angle", 0.0)) if rule.slant else 0.0
+    # у рукописного строения белое за входом строчных — от тела стороны
+    рукописный = rule.soft and rule.cursive and cursive_of(master, рост, шаг, наклон, rule)
 
     профили = {}
     высотаЗоны = 0.0
@@ -516,10 +634,12 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
 
         def замер(г):
             профиль = ink_profile(знак.edges, -выступ, верх(г) + выступ, шаг)
+            if наклон:
+                профиль = deskewed(профиль, наклон, верх(г) / 2)
             if профиль is None:
                 return None
             if rule.soft:
-                л, п, в = white_soft(профиль, float(advance), rule, upm)
+                л, п, в = white_soft(профиль, float(advance), rule, upm, рукописный and г == LOWER)
             else:
                 л, п, в = white(профиль, float(advance), глубина)
             return (профиль, л, п, в) if в > 0 else None
@@ -655,7 +775,7 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
                                  advance + разница, derived=True))
 
     # ── знаки препинания: своя мера, против штамба прямой буквы ──
-    items += [з for з in mark_items(master, items, rule.threshold * upm / 1000, рост, капитель)
+    items += [з for з in mark_items(master, items, rule.threshold * upm / 1000, рост, капитель, rule)
               if з.name not in fixed]
     return SpacingPlan(items, rule, эталоны, master.upm, профили, высотаЗоны,
                        space_target(master, rule))
@@ -670,7 +790,7 @@ def space_target(master, rule=None):
     ширина = master.advance(пробел)
     if ширина <= 0:
         return None
-    мед = median(lower_widths(master, LOWER))
+    мед = median(lower_widths(master, LOWER, rule.robust_heights))
     if not мед > 0:
         return None
     цель = rnd(мед * rule.word_gap)
@@ -681,9 +801,9 @@ def space_target(master, rule=None):
     return SpaceTarget(ширина, int(цель), мед, rule.word_gap, выбился)
 
 
-def lower_widths(master, г):
+def lower_widths(master, г, robust=False):
     from .geometry import contours_rect
-    upm, капитель, рост = heights(master)
+    upm, капитель, рост = heights(master, robust)
     капитель = max(капитель, рост + 1)
     вышло = []
     for код, i in master.cmap.items():
@@ -772,7 +892,41 @@ def stem_sides(master, glyph, y):
     return (слева, float(master.advance(glyph)) - справа)
 
 
-def mark_items(master, letters, порог, рост, капитель):
+def _protruding_sides(master, glyph, поля, верх, rule):
+    """Поля прямой буквы для знаков препинания с выступом (поправка окна, вне
+    исходного правила): если крайняя точка стороны лежит в середине высоты
+    строки (20–80 %) и выступает за штамб дальше короткой засечки
+    (`serif_depth`), краем буквы считается она. У рукописного шрифта с
+    входящей дугой кончик дуги у n — на 70 % роста и на 155 единиц левее
+    штамба, и по штамбу знаки препинания отходили от слов (замер
+    23.10.2026). Засечки (даже длинные, на 8–10 % кегля) и входящие штрихи
+    курсивов стоят у базовой линии и верха строки — их это не касается"""
+    профиль = ink_profile(master.glyphs[glyph].edges, 0, верх, float(master.upm) / 200)
+    if профиль is None:
+        return поля
+    засечка = rule.serif_depth * master.upm
+    n = len(профиль.left)
+
+    def край(строки, крайний):
+        есть = [(x, i) for i, x in enumerate(строки) if x is not None]
+        if not есть:
+            return None
+        x, i = крайний(есть)
+        return x if 0.2 * n <= i <= 0.8 * n else None
+
+    слева, справа = поля
+    край_л = край(профиль.left, min)
+    край_п = край(профиль.right, max)
+    if край_л is not None and слева - край_л > засечка:
+        слева = край_л
+    if край_п is not None:
+        край_п = float(master.advance(glyph)) - край_п
+        if справа - край_п > засечка:
+            справа = край_п
+    return (слева, справа)
+
+
+def mark_items(master, letters, порог, рост, капитель, rule=None):
     """Апроши знаков препинания — с кодом и их варианты без кода
     («parenleft.case» берёт норму «(» и меряется против «H»)"""
     from .geometry import contours_rect
@@ -785,6 +939,8 @@ def mark_items(master, letters, порог, рост, капитель):
             поля = stem_sides(master, i, высота)
             if поля is None:
                 continue
+            if rule is not None and rule.soft:
+                поля = _protruding_sides(master, i, поля, 2 * высота, rule)
             имя = master.name(i)
             своя = next((з for з in letters if з.name == имя and not з.derived), None)
             if своя is not None and float(своя.shift) >= порог:

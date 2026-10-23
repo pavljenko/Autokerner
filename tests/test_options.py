@@ -198,9 +198,107 @@ class OpticalSpacingTest(unittest.TestCase):
         for контуры, ширина in ((диагональ, 380), (T, 600)):
             self.assertEqual(self.мягко(контуры, ширина, 0.75), self.мягко(контуры, ширина, 1.0))
 
+    def test_heights_by_letters(self):
+        from autokerner.model import Glyph, Master
+        from autokerner.spacing import heights
+        from tests.synthetic import прямоугольник
+        m = мастер()
+        # «x» с росчерками вверх и вниз: габарит больше роста строчных
+        знаки = [g for g in m.glyphs if g.name != "x"] + [
+            Glyph("x", [0x78], 480, [прямоугольник(30, -150, 450, 700)]),
+            Glyph("z", [0x7A], 480, [прямоугольник(30, 0, 450, 500)]),
+            Glyph("v", [0x76], 480, [прямоугольник(30, 0, 450, 500)])]
+        m = Master(1000, знаки, x_height=500, cap_height=700, label="росчерки")
+        self.assertEqual(heights(m)[2], 850)
+        self.assertEqual(heights(m, True)[2], 500)
+        self.assertFalse(Options.classic().spacing_rule().robust_heights)
+
+    def test_punctuation_edge_at_mid_protrusion(self):
+        from autokerner.model import Glyph, Master
+        from autokerner.spacing import SpacingRule, _protruding_sides, stem_sides
+        from tests.synthetic import прямоугольник
+        m = мастер()
+        дуга = Glyph("n", [0x6E], 500, [прямоугольник(150, 0, 230, 500), прямоугольник(20, 330, 150, 360),
+                                         прямоугольник(370, 0, 450, 500)])
+        засечки = Glyph("H", [0x48], 640, [прямоугольник(160, 0, 240, 700), прямоугольник(60, 0, 340, 30),
+                                            прямоугольник(400, 0, 480, 700)])
+        m = Master(1000, [g for g in m.glyphs if g.name not in ("n", "H")] + [дуга, засечки], x_height=500,
+                   cap_height=700, label="выступы")
+        rule = SpacingRule(soft=True)
+        i = m.glyph(0x6E)
+        # выступ на 70 % высоты дальше засечки — краем считается он
+        self.assertEqual(_protruding_sides(m, i, stem_sides(m, i, 250), 500, rule)[0], 20)
+        # длинная засечка у базовой линии — штамб остаётся краем
+        i = m.glyph(0x48)
+        поля = stem_sides(m, i, 350)
+        self.assertEqual(_protruding_sides(m, i, поля, 700, rule), поля)
+
     def test_classic_keeps_hard_rule(self):
         self.assertFalse(Options.classic().spacing_rule().soft)
         self.assertTrue(Options().spacing_rule().soft)
+
+
+class ItalicTest(unittest.TestCase):
+    """Курсив вдоль наклона (`deskewed`) и рукописное строение (`cursive_of`)"""
+
+    def test_slanted_stem_is_straight_after_deskew(self):
+        import math
+        from autokerner.geometry import Contour, deskewed, ink_profile, slant_of
+        from autokerner.model import Glyph
+        self.assertEqual(slant_of(0), 0.0)
+        t = slant_of(-12)
+        self.assertAlmostEqual(t, math.tan(math.radians(12)))
+        штамб = Contour([("moveTo", (100, 0)), ("lineTo", (180, 0)), ("lineTo", (180 + 500 * t, 500)),
+                         ("lineTo", (100 + 500 * t, 500)), ("closePath",)])
+        профиль = ink_profile(Glyph("l", [], 300, [штамб]).edges, 0, 500, 1000 / 256)
+        левые = [x for x in deskewed(профиль, t).left if x is not None]
+        self.assertLess(max(левые) - min(левые), 1.0)
+        self.assertGreater(max(профиль.left) - min(профиль.left), 90)
+
+    def знак_со_входом(self, имя, код, засечка_внизу=False):
+        from autokerner.model import Glyph
+        from tests.synthetic import прямоугольник
+        # штамб и вход-крючок вверху слева, на 110 дальше штамба
+        контуры = [прямоугольник(150, 0, 230, 500), прямоугольник(40, 380, 150, 420),
+                   прямоугольник(370, 0, 450, 500)]
+        if засечка_внизу:
+            контуры.append(прямоугольник(40, 0, 150, 40))
+        return Glyph(имя, [код], 500, контуры)
+
+    def мастер(self, засечка_внизу=False):
+        from autokerner.model import Master
+        m = мастер()
+        буквы = {ord(ch): ch for ch in "nmuirp"}
+        свои = [g for g in m.glyphs if not set(g.codes) & set(буквы)]
+        return Master(1000, свои + [self.знак_со_входом(ch, к, засечка_внизу) for к, ch in буквы.items()],
+                      x_height=500, cap_height=700, label="вход")
+
+    def test_cursive_structure(self):
+        from autokerner.spacing import cursive_of
+        self.assertTrue(cursive_of(self.мастер(), 500, 1000 / 256))
+        # выступ и вверху, и внизу — засечки прямого шрифта
+        self.assertFalse(cursive_of(self.мастер(засечка_внизу=True), 500, 1000 / 256))
+        self.assertFalse(cursive_of(мастер(), 500, 1000 / 256))
+
+    def test_white_behind_entry_counts_from_body(self):
+        from autokerner.geometry import ink_profile
+        from autokerner.spacing import SpacingRule, white_soft
+        from tests.synthetic import прямоугольник
+        from autokerner.model import Glyph
+        rule = SpacingRule(soft=True, cursive=True)
+        n = self.знак_со_входом("n", 0x6E)
+        профиль = ink_profile(n.edges, 0, 500, 1000 / 256)
+        без, со = white_soft(профиль, 500.0, rule, 1000), white_soft(профиль, 500.0, rule, 1000, True)
+        self.assertGreater(со[0], без[0])
+        self.assertEqual(со[1], без[1])
+        штамб = ink_profile(Glyph("l", [], 300, [прямоугольник(100, 0, 180, 500)]).edges, 0, 500, 1000 / 256)
+        self.assertEqual(white_soft(штамб, 300.0, rule, 1000), white_soft(штамб, 300.0, rule, 1000, True))
+
+    def test_options(self):
+        self.assertTrue(Options().spacing_rule().cursive)
+        self.assertTrue(Options().spacing_rule().slant)
+        self.assertFalse(Options.classic().spacing_rule().cursive)
+        self.assertFalse(Options.classic().spacing_rule().slant)
 
 
 class LowerOverhangTest(unittest.TestCase):
@@ -213,7 +311,10 @@ class LowerOverhangTest(unittest.TestCase):
         f = Glyph("f", [0x66], 380, [прямоугольник(60, 0, 140, 760), прямоугольник(60, 700, 360, 760),
                                       прямоугольник(20, 440, 170, 500)])
         f_alt = Glyph("f.ss01", [], 380, list(f.contours))
-        return Master(1000, list(m.glyphs) + [f, f_alt], x_height=500, cap_height=700, label="с f")
+        # «д» с завитком влево высоко над соседкой
+        d = Glyph("d", [0x64], 480, [прямоугольник(60, 0, 420, 500), прямоугольник(-200, 760, 300, 820),
+                                      прямоугольник(260, 500, 320, 820)])
+        return Master(1000, list(m.glyphs) + [f, f_alt, d], x_height=500, cap_height=700, label="с f")
 
     def значение(self, m, law, a, b):
         мат = kerning.make_matrix(m, law)
@@ -229,6 +330,17 @@ class LowerOverhangTest(unittest.TestCase):
         self.assertEqual(self.значение(m, Options().kern_law(), "T", "o"),
                          self.значение(m, Options.classic().kern_law(), "T", "o"))
 
+    def test_letters_collide_above_the_line_without_push(self):
+        m = self.мастер_с_f()
+        # завитки двух «d» сходятся выше строки: исходное правило раздвигает, поправка — нет
+        self.assertGreater(self.значение(m, Options.classic().kern_law(), "d", "d"), 0)
+        self.assertEqual(self.значение(m, Options().kern_law(), "d", "d"), 0)
+
+    def test_curl_of_right_letter_over_lowercase_is_not_kerned(self):
+        m = self.мастер_с_f()
+        self.assertLess(self.значение(m, Options.classic().kern_law(), "u", "d"), 0)
+        self.assertEqual(self.значение(m, Options().kern_law(), "u", "d"), 0)
+
     def test_fast_loop_matches_kernel(self):
         m = self.мастер_с_f()
         law = Options().kern_law()
@@ -239,11 +351,17 @@ class LowerOverhangTest(unittest.TestCase):
             i = m.by_name(имя)
             ф = kerning.make_shape(m.glyphs[i].edges, m.advance(i), grid, рост, law)
             коды = m.codes_by_glyph.get(i)
-            ф.lower = kerning._lower_letter(m, min(коды) if коды else kerning.MAXCODE, имя)
+            код = min(коды) if коды else kerning.MAXCODE
+            ф.lower = kerning._lower_letter(m, код, имя)
+            регистр = kerning._letter_case(m, код, имя)
+            if регистр is not None:
+                _, кап, рост_ = kerning.heights(m, True)
+                ф.body_lo = kerning._row(grid, -kerning.BODY_MARGIN * m.upm)
+                ф.body_hi = kerning._row(grid, (рост_ if регистр == "lower" else кап) + kerning.BODY_MARGIN * m.upm)
             формы[имя] = ф
         ctx = kerning.make_context(m, grid, рост, law, lambda i: формы[m.name(i)])
-        for a in ("f", "f.ss01", "n", "o", "T", "u"):
-            for b in ("o", "n", "u", "x", "f"):
+        for a in ("f", "f.ss01", "n", "o", "T", "u", "d"):
+            for b in ("o", "n", "u", "x", "f", "d"):
                 л, п = формы[a], формы[b]
                 вид = kerning.pair_kind(л.kind, п.kind)
                 часть = law.part(вид)

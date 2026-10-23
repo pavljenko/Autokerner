@@ -56,6 +56,10 @@ class Options:
     kern_skip_nontext = True     # метки, отдельные акценты и «_» не кернятся
     spacing_optical = True       # белое у края — мягко, с укрытием (задачи #1, #2)
     kern_lower_overhang = True   # хвостик f над строчной не кернится (задача #3)
+    heights_by_letters = True    # рост и капитель сверены с медианой верхов букв
+    kern_guard_body = True       # буквы раздвигаются только за сход в теле строки
+    italic_slant = True          # курсив меряется вдоль угла наклона
+    spacing_cursive = True       # у рукописного строения белое за входом — от тела
     kern_mode = REPLACE          # REPLACE — заменить целиком; MERGE — дописать к своему
 
     FIELDS = ("spacing", "space", "kerning", "glyphs", "keep_marked", "keep_metric_keys",
@@ -63,7 +67,8 @@ class Options:
               "kern_strength", "kern_threshold", "kern_clearance", "kern_precision", "kern_limit",
               "kern_round", "kern_max_tight", "kern_figures", "kern_mode", "space_edge",
               "kern_neutral", "kern_marks_apart", "kern_max_loose", "kern_skip_nontext",
-              "spacing_optical", "kern_lower_overhang")
+              "spacing_optical", "kern_lower_overhang", "heights_by_letters",
+              "kern_guard_body", "italic_slant", "spacing_cursive")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -100,14 +105,18 @@ class Options:
         """Исходное правило без поправок окна — для сверки с исходным расчётом"""
         o = cls(kern_figures=FIGURES_RULE, space_edge=False, kern_neutral=NEUTRAL_MAX,
                 nbsp_follows_space=False, kern_marks_apart=False, kern_max_loose=0,
-                kern_skip_nontext=False, spacing_optical=False, kern_lower_overhang=False)
+                kern_skip_nontext=False, spacing_optical=False, kern_lower_overhang=False,
+                heights_by_letters=False, kern_guard_body=False, italic_slant=False,
+                spacing_cursive=False)
         for k, v in kw.items():
             setattr(o, k, v)
         return o
 
     def spacing_rule(self):
         return SpacingRule(threshold=self.spacing_threshold, word_gap=self.word_gap / 100.0,
-                           word_gap_edge=bool(self.space_edge), soft=bool(self.spacing_optical))
+                           word_gap_edge=bool(self.space_edge), soft=bool(self.spacing_optical),
+                           robust_heights=bool(self.heights_by_letters), slant=bool(self.italic_slant),
+                           cursive=bool(self.spacing_cursive))
 
     def kern_rule(self):
         return KernRule(threshold=self.kern_threshold, visible=self.kern_precision,
@@ -118,7 +127,9 @@ class Options:
                        clearance=self.kern_clearance, figures=self.kern_figures,
                        neutral=self.kern_neutral, marks_apart=bool(self.kern_marks_apart),
                        skip_nontext=bool(self.kern_skip_nontext),
-                       lower_overhang=bool(self.kern_lower_overhang))
+                       lower_overhang=bool(self.kern_lower_overhang),
+                       robust_heights=bool(self.heights_by_letters),
+                       guard_body=bool(self.kern_guard_body), slant=bool(self.italic_slant))
 
     def is_default_rule(self):
         """Числа правила — как по умолчанию (поправки окна не в счёт)"""

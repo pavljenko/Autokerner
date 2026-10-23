@@ -44,10 +44,12 @@ class Master:
     `x_height` и `cap_height` — объявленные высоты (OS/2 или поля мастера);
     None — не заданы. `weight` — число, под которым мастер идёт в итоге
     (вес OS/2 или номер мастера), `label` — имя мастера для отчёта.
-    `round_shifted` — правленый знак встаёт точками на целые (`with_metrics`)."""
+    `round_shifted` — правленый знак встаёт точками на целые (`with_metrics`).
+    `italic_angle` — угол наклона курсива в градусах, как в post.italicAngle
+    (отрицательный — наклон вправо); 0 — прямой."""
 
     def __init__(self, upm, glyphs, x_height=None, cap_height=None, label="", weight=0.0,
-                 round_shifted=True):
+                 round_shifted=True, italic_angle=0.0):
         self.upm = int(upm)
         self.glyphs = list(glyphs)
         self.x_height = x_height or None
@@ -55,6 +57,7 @@ class Master:
         self.label = label
         self.weight = weight
         self.round_shifted = round_shifted
+        self.italic_angle = float(italic_angle or 0.0)
         self.index = {}
         for i, g in enumerate(self.glyphs):
             self.index.setdefault(g.name, i)
@@ -126,7 +129,7 @@ class Master:
                 контуры = shift_contours(g.contours, dx)
             знаки.append(Glyph(g.name, g.codes, ширина, контуры, g.components))
         return Master(self.upm, знаки, self.x_height, self.cap_height, self.label, self.weight,
-                      self.round_shifted)
+                      self.round_shifted, self.italic_angle)
 
 
 __all__ = ["Contour", "Glyph", "Master"]

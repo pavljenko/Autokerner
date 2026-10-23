@@ -64,5 +64,6 @@ def master_from_font(шрифт, label="", weight=None):
         капитель = getattr(os2, "sCapHeight", 0) or None
     if weight is None:
         weight = float(os2.usWeightClass) if os2 is not None else 400.0
+    наклон = float(getattr(шрифт["post"], "italicAngle", 0.0) or 0.0) if "post" in шрифт else 0.0
     return Master(шрифт["head"].unitsPerEm, знаки, рост, капитель, label=label, weight=weight,
-                  round_shifted="glyf" not in шрифт)
+                  round_shifted="glyf" not in шрифт, italic_angle=наклон)

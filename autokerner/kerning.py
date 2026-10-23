@@ -17,9 +17,10 @@ from array import array
 from operator import and_, itemgetter, sub
 from struct import Struct
 
-from .geometry import INF, INT16_MAX, clamp16, contours_rect, f32, ink_profile, irnd, median
-from .spacing import SpacingRule, base_body, heights, is_digit_name, is_number_code, stem_sides
-from .unicode_props import is_letter, is_lowercase, is_nontext
+from .geometry import INF, INT16_MAX, clamp16, contours_rect, deskewed, f32, ink_profile, irnd, median, slant_of
+from .spacing import (DECLARED_HEIGHT_TOLERANCE, _НА_РОСТЕ, SpacingRule, _median_top, base_body, heights,
+                      is_digit_name, is_number_code, stem_sides)
+from .unicode_props import base_code, is_letter, is_lowercase, is_nontext
 
 LETTER, LOW, HIGH, MIDDLE = 0, 1, 2, 3
 KINDS = (LETTER, LOW, HIGH, MIDDLE)
@@ -46,7 +47,8 @@ class KernLaw:
     тысячных кегля"""
 
     def __init__(self, threshold=10, strength=1.0, clearance=25, figures=FIGURES_RULE,
-                 neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False, lower_overhang=False):
+                 neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False, lower_overhang=False,
+                 robust_heights=False, guard_body=False, slant=False):
         self.letters = LawPart(0.45, 40, 3)
         self.low = LawPart(0.40, 0, 1)
         self.high = LawPart(0.48, 0, 1)
@@ -70,6 +72,12 @@ class KernLaw:
         self.skip_nontext = skip_nontext
         # хвостик строчной над строчной кармана не образует (`overhang_cut`)
         self.lower_overhang = lower_overhang
+        # рост строчных сверен с медианой верхов букв (`x_height_of`)
+        self.robust_heights = robust_heights
+        # сторож раздвигает буквы только за сход в теле строки (`body_raw`)
+        self.guard_body = guard_body
+        # курсив меряется вдоль наклона (`slant_for`)
+        self.slant = slant
 
     def part(self, kind):
         return (self.letters, self.low, self.high, self.middle)[kind]
@@ -119,9 +127,19 @@ class Grid:
         self.step = u / 200
 
 
-def x_height_of(master):
+def x_height_of(master, robust=False):
     """Рост строчных для кернинга: объявленный, иначе верх «x», иначе
-    половина кегля"""
+    половина кегля; `robust` — ещё и сверенный с медианой верхов букв
+    (поправка окна, `spacing.by_letters`)"""
+    рост = _declared_x_height(master)
+    if robust:
+        мера = _median_top(master, _НА_РОСТЕ)
+        if мера is not None and abs(рост - мера) > float(master.upm) * DECLARED_HEIGHT_TOLERANCE:
+            рост = мера
+    return рост
+
+
+def _declared_x_height(master):
     if master.x_height and master.x_height > 0:
         return float(master.x_height)
     i = master.glyph(0x78)
@@ -167,14 +185,15 @@ class KernShape:
     """Знак глазами кернинга: края чернил на каждой высоте сетки и тени
     выступов на каждый наклон закона"""
     __slots__ = ("advance", "kind", "left", "right", "L", "R", "SL", "SR", "rows",
-                 "ink_low", "ink_high", "step", "lower", "cuts")
+                 "ink_low", "ink_high", "step", "lower", "cuts", "body_lo", "body_hi")
 
 
-def make_shape(edges, advance, grid, рост, law):
-    """Форма знака; нет чернил или нулевая ширина — None"""
+def make_shape(edges, advance, grid, рост, law, наклон=0.0):
+    """Форма знака; нет чернил или нулевая ширина — None. `наклон` — сдвиг
+    курсива на единицу высоты: края выпрямляются по нему (`deskewed`)"""
     if not advance > 0:
         return None
-    профиль = ink_profile(edges, grid.low, grid.high, grid.step)
+    профиль = deskewed(ink_profile(edges, grid.low, grid.high, grid.step), наклон)
     if профиль is None:
         return None
     слева = [x if x is not None else INF for x in профиль.left]
@@ -211,6 +230,7 @@ def make_shape(edges, advance, grid, рост, law):
     s.step = grid.step
     s.lower = False
     s.cuts = None
+    s.body_lo = s.body_hi = None
     return s
 
 
@@ -231,6 +251,7 @@ def empty_shape(like):
     s.step = like.step
     s.lower = False
     s.cuts = None
+    s.body_lo = s.body_hi = None
     return s
 
 
@@ -281,6 +302,50 @@ def _cut(л, предел, наклоны):
     s.step = л.step
     s.lower = True
     s.cuts = None
+    s.body_lo, s.body_hi = л.body_lo, л.body_hi
+    return s
+
+
+def overhang_cut_right(л, п, law):
+    """Правый знак для закона кармана — то же в зеркале: в паре двух
+    строчных чернила правой выше верха левой (с запасом 5 % кегля) кармана
+    не образуют. Завиток «д» в рукописном шрифте уходит влево высоко над
+    «у», и закон закрывал карман под ним: «уд» сходилась на −115 тысячных,
+    «д» наезжала на «у» (шрифт в духе Конашевича, 23.10.2026)"""
+    if not (л.lower and п.lower and getattr(law, "lower_overhang", False)):
+        return п
+    предел = л.ink_high + OVERHANG_ROWS
+    if п.ink_high <= предел:
+        return п
+    if п.cuts is None:
+        п.cuts = {}
+    ключ = ("слева", предел)
+    s = п.cuts.get(ключ)
+    if s is None:
+        s = п.cuts[ключ] = _cut_left(п, предел, law.slopes)
+    return s
+
+
+def _cut_left(п, предел, наклоны):
+    слева = [x if i <= предел else INF for i, x in enumerate(п.L)]
+    if min(слева) == INF:
+        return п
+    s = KernShape()
+    s.advance = п.advance
+    s.kind = п.kind
+    s.left = min(слева)
+    s.right = п.right
+    s.L = слева
+    s.R = п.R
+    s.SL = [_f32_list(_shadow(слева, наклон, п.step, True)) for наклон in наклоны]
+    s.SR = п.SR
+    s.rows = п.rows
+    s.ink_low = п.ink_low
+    s.ink_high = предел
+    s.step = п.step
+    s.lower = True
+    s.cuts = None
+    s.body_lo, s.body_hi = п.body_lo, п.body_hi
     return s
 
 
@@ -344,14 +409,41 @@ def law_value(л, п, часть, номер, пол, upm):
     return -часть.share * сверх * тысячная
 
 
+# Тело строки для сторожа: от базовой линии до роста строчных (капители у
+# прописных) с запасом 5 % кегля вверх и вниз
+BODY_MARGIN = 0.05
+
+
+def body_raw(л, п, от, до):
+    """Просвет пары в теле строки (поправка окна, вне исходного правила):
+    сторож раздвигает две буквы, только если они сходятся между базовой
+    линией и ростом строчных или высотой прописных. Выносные и росчерки над
+    и под строкой заходят друг на друга, и дизайнеры их не раздвигают: у
+    хорошо кернённых шрифтов пары fb, fl, Qg, Qj — ноль, а правило давало
+    +40…+130; в рукописном шрифте нарочно сходятся «бд», «вд» (замер
+    23.10.2026). У знака не-буквы тела нет — просвет по всем строкам (None)"""
+    if л.body_hi is None or п.body_hi is None:
+        return None
+    lo = max(от, min(л.body_lo, п.body_lo))
+    hi = min(до, max(л.body_hi, п.body_hi))
+    if lo > hi:
+        return INF
+    m = min(map(sub, п.L[lo:hi + 1], л.R[lo:hi + 1]))
+    return л.advance + f32(m) if m != INF else INF
+
+
 def kernel(л, п, часть, номер, пол, law, upm, обычный, закон=None):
     """Ядро меры: (число, запас до зазора). `закон` — закон кармана, уже
     посчитанный по телу основы"""
     тысячная = float(upm) / 1000
-    k = закон if закон is not None else law_value(overhang_cut(л, п, law), п, часть, номер, пол, upm)
+    k = закон if закон is not None else law_value(overhang_cut(л, п, law), overhang_cut_right(л, п, law),
+                                                 часть, номер, пол, upm)
     if k is None:
         return (0, INT16_MAX)
-    сырое = л.advance + closest(л.R, п.L, max(л.ink_low, п.ink_low), min(л.ink_high, п.ink_high))
+    от, до = max(л.ink_low, п.ink_low), min(л.ink_high, п.ink_high)
+    сырое = л.advance + closest(л.R, п.L, от, до)
+    тело = body_raw(л, п, от, до) if getattr(law, "guard_body", False) else None
+    тело = сырое if тело is None else тело
     запас = INT16_MAX
     зазор = law.clearance * тысячная
     if сырое != INF:
@@ -360,8 +452,8 @@ def kernel(л, п, часть, номер, пол, law, upm, обычный, з�
         if k < 0:
             k = max(k, min(0, зазор - сырое))
         раздвигать = (обычный if обычный is not None else INF) > law.touching * тысячная
-        if раздвигать and сырое < зазор:
-            k = max(k, зазор - сырое)
+        if раздвигать and тело < зазор:
+            k = max(k, зазор - тело)
         if раздвигать:
             остаток = сырое + k - зазор
             запас = clamp16(int(max(0, остаток) // 1))
@@ -493,20 +585,55 @@ def nontext_glyphs(master):
     return вне
 
 
+def slant_for(master, law):
+    """Сдвиг на единицу высоты для курсива (поправка окна, вне исходного
+    правила): карман и тени меряются вдоль наклона. Горизонтальная мера
+    раздувала карманы курсива в одну сторону: у десяти хорошо кернённых
+    курсивов AV, AW, AY выходили на 60–90 тысячных теснее, чем у дизайнера,
+    а VA, WA, YA — почти как у него (замер 23.10.2026). Просвет в строке
+    от выпрямления не меняется; у прямого шрифта — ноль"""
+    return slant_of(getattr(master, "italic_angle", 0.0)) if getattr(law, "slant", False) else 0.0
+
+
 def matrix_names(master, law):
     """Знаки, которые можно кернить: с чернилами и шириной, по коду, затем
     по имени; с `law.skip_nontext` — без меток, отдельных акцентов и «_»"""
     grid = Grid(master.upm)
-    рост = x_height_of(master)
+    рост = x_height_of(master, getattr(law, "robust_heights", False))
     вне = nontext_glyphs(master) if getattr(law, "skip_nontext", False) else ()
     вышло = []
     for i, _, имя in _candidates(master, None):
         if имя in вне:
             continue
         g = master.glyphs[i]
-        if make_shape(g.edges, g.advance, grid, рост, law) is not None:
+        if make_shape(g.edges, g.advance, grid, рост, law, slant_for(master, law)) is not None:
             вышло.append(имя)
     return вышло
+
+
+def _row(grid, y):
+    return int((y - grid.low) / grid.step)
+
+
+def _letter_case(master, код, имя):
+    """Регистр буквы: "lower", "upper" или None (не буква или буква с
+    диакритикой: столкновение её акцента дизайнеры раздвигают — ďb, fì, ąj) —
+    по коду, у знака без кода — по имени основы"""
+    if код == MAXCODE:
+        коды = master.codes_by_glyph
+        куски = [к for к in имя.split(".")[0].split("_") if к]
+        if not куски:
+            return None
+        i = master.by_name(куски[0])
+        код = min(коды[i]) if i is not None and i in коды else _code_in_name(куски[0])
+        if код is None:
+            return None
+    if not is_letter(код):
+        return None
+    основа = base_code(код)
+    if основа is not None and основа != код:
+        return None
+    return "lower" if is_lowercase(код) else "upper"
 
 
 def _lower_letter(master, код, имя):
@@ -528,14 +655,16 @@ def make_matrix(master, law, names=None, progress=None):
     """Матрица всех пар мастера. `names` — общий
     список знаков на все мастера; знак без формы на этом мастере — пустой"""
     grid = Grid(master.upm)
-    рост = x_height_of(master)
+    рост = x_height_of(master, getattr(law, "robust_heights", False))
     кандидаты = _candidates(master, names)
     кэш = {}
+    наклон = slant_for(master, law)
+    _, капитель_тела, рост_тела = heights(master, getattr(law, "robust_heights", False))
 
     def форма_глифа(i):
         if i not in кэш:
             g = master.glyphs[i]
-            кэш[i] = make_shape(g.edges, g.advance, grid, рост, law)
+            кэш[i] = make_shape(g.edges, g.advance, grid, рост, law, наклон)
         return кэш[i]
 
     формы = [форма_глифа(i) if i >= 0 else None for i, _, _ in кандидаты]
@@ -555,6 +684,12 @@ def make_matrix(master, law, names=None, progress=None):
         знаки.append(форма)
         if getattr(law, "lower_overhang", False):
             форма.lower = _lower_letter(master, код, имя)
+        if getattr(law, "guard_body", False):
+            регистр = _letter_case(master, код, имя)
+            if регистр is not None:
+                верх_тела = рост_тела if регистр == "lower" else капитель_тела
+                форма.body_lo = _row(grid, -BODY_MARGIN * master.upm)
+                форма.body_hi = _row(grid, верх_тела + BODY_MARGIN * master.upm)
         цифра = код != MAXCODE and is_number_code(код)
         цифры.append(цифра or is_digit_name(имя))
     n = len(знаки)
@@ -575,7 +710,7 @@ def make_matrix(master, law, names=None, progress=None):
     индекс = {}
     for j, имя in enumerate(имена):
         индекс.setdefault(имя, j)
-    _, капитель, рост_букв = heights(master)
+    _, капитель, рост_букв = heights(master, getattr(law, "robust_heights", False))
     тела = [-1] * n
     поправки = [0.0] * (n * 2)
     for i in range(n):
@@ -627,6 +762,8 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
     законы = [(ч.share, ч.dead_zone, номер) for ч, номер in части]
     формы = [(ф.kind, ф.ink_low, ф.ink_high, ф.L, ф.SL, ф.left) for ф in знаки]
     строчные = [ф.lower for ф in знаки] if getattr(law, "lower_overhang", False) else None
+    по_телу = bool(getattr(law, "guard_body", False))
+    тела_строки = [(ф.body_lo, ф.body_hi) for ф in знаки]
     законы_основ = {}
     for л in range(n):
         if progress and л % 32 == 0:
@@ -641,6 +778,7 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
         ширина = фл.advance
         габарит_л = ширина - фл.right
         срезать = строчные is not None and строчные[л]
+        тело_lo_л, тело_hi_л = фл.body_lo, фл.body_hi
         строка = л * n
         for п in range(n):
             if цифра_л and цифры[п]:
@@ -660,7 +798,8 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
                 else:
                     вид = род[знаки[а].kind][знаки[б].kind]
                     частьО, номерО = части[вид]
-                    k = law_value(overhang_cut(знаки[а], знаки[б], law), знаки[б], частьО, номерО,
+                    k = law_value(overhang_cut(знаки[а], знаки[б], law),
+                                  overhang_cut_right(знаки[а], знаки[б], law), частьО, номерО,
                                   полы[вид], upm)
                     законы_основ[ключ] = k
                 if k is not None:
@@ -669,18 +808,23 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
                 # закон кармана (`law_value`)
                 доля, мёртвая, номер = законы[вид_пары]
                 SR, габарит, верх = SR_л[номер], габарит_л, верх_л
-                if срезать and строчные[п] and верх_л > верх_п + OVERHANG_ROWS:
-                    # хвостик строчной над строчной (`overhang_cut`)
-                    ф = overhang_cut(фл, знаки[п], law)
-                    SR, габарит, верх = ф.SR[номер], ширина - ф.right, ф.ink_high
+                SL, левый, верхП = SL_п[номер], левый_п, верх_п
+                if срезать and строчные[п]:
+                    # хвостик строчной над строчной (`overhang_cut`, `overhang_cut_right`)
+                    if верх_л > верх_п + OVERHANG_ROWS:
+                        ф = overhang_cut(фл, знаки[п], law)
+                        SR, габарит, верх = ф.SR[номер], ширина - ф.right, ф.ink_high
+                    elif верх_п > верх_л + OVERHANG_ROWS:
+                        ф = overhang_cut_right(фл, знаки[п], law)
+                        SL, левый, верхП = ф.SL[номер], ф.left, ф.ink_high
                 от = низ_л if низ_л < низ_п else низ_п
-                до = верх if верх > верх_п else верх_п
-                m = min(map(sub, SL_п[номер][от:до + 1], SR[от:до + 1]))
+                до = верх if верх > верхП else верхП
+                m = min(map(sub, SL[от:до + 1], SR[от:до + 1]))
                 if m == INF:
                     k = None
                 else:
                     сТенью = ширина + unpack(pack(m))[0]
-                    карман = max(0, сТенью - (габарит + левый_п)) / тысячная
+                    карман = max(0, сТенью - (габарит + левый)) / тысячная
                     сверх = max(0, карман - мёртвая)
                     пол = полы[вид_пары]
                     if пол > мёртвая:
@@ -700,12 +844,23 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
                 сырое = ширина + unpack(pack(m))[0] if m != INF else INF
             else:
                 сырое = INF
+            тело = сырое
+            if по_телу and тело_hi_л is not None and тела_строки[п][1] is not None:
+                # сторож — только за сход в теле строки (`body_raw`)
+                lo_п, hi_п = тела_строки[п]
+                lo = max(от, min(тело_lo_л, lo_п))
+                hi = min(до, max(тело_hi_л, hi_п))
+                if lo > hi:
+                    тело = INF
+                else:
+                    m = min(map(sub, L_п[lo:hi + 1], R_л[lo:hi + 1]))
+                    тело = ширина + unpack(pack(m))[0] if m != INF else INF
             запас = INT16_MAX
             if сырое != INF:
                 if k < 0:
                     k = max(k, min(0, зазор - сырое))
-                if раздвигать and сырое < зазор:
-                    k = max(k, зазор - сырое)
+                if раздвигать and тело < зазор:
+                    k = max(k, зазор - тело)
             число = 0 if abs(k) < порог else irnd(k)
             if раздвигать and сырое != INF:
                 запас = clamp16(int(max(0, сырое + k - зазор) // 1))

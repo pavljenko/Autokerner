@@ -21,7 +21,12 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   small caps), and compared with the median of the same font. White right at
   the edge counts in full, deeper white counts less and less, white sheltered
   behind a crossbar or an arm counts little, and the white between the tip of a
-  short serif and its stem counts three quarters, much as the eye sees it. Only glyphs that stand out from their own family are changed, so the font keeps its
+  short serif and its stem counts three quarters, much as the eye sees it.
+  Italics are measured along the slant angle. When lowercase stems start
+  with an entry stroke, a hook or an arc at the top left with no serif at the
+  foot, as in italics and handwritten faces, the white behind the entry and
+  behind the exit at the bottom right also counts three quarters and is
+  measured from the body of the letter, not from the tip of the stroke. Only glyphs that stand out from their own family are changed, so the font keeps its
   overall looseness or tightness. Accented letters follow their base letter,
   composites move with their base, punctuation is spaced against the stem of a
   straight letter. A word space that is much wider than the rule is narrowed
@@ -32,9 +37,11 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   pocket is closed; the share differs for letters and for low, high and middle
   marks. Pockets no deeper than the font's usual one (the median of model
   pairs such as HO and no) are left alone. In a pair of two lowercase letters,
-  the part of the left letter that rises above the right one, such as the hook
-  of f over o, makes no pocket. Outlines never come closer than
-  2.5% of the em. Figures never run into each other across `, . :`
+  the part of either letter that rises above the other, such as the hook of f
+  over o, makes no pocket. Within the line, between the
+  baseline and the x-height or cap height, outlines never come closer than
+  2.5% of the em; ascenders, descenders and swashes may overlap, as they do in
+  designers' own fonts. Figures never run into each other across `, . :`
   (7,4 · 3.5 · 12:30), and marks at different heights, such as a quote and a
   comma, are not moved under each other. Combining marks, standalone accents
   and the underscore are not kerned: they never stand next to letters in text.

@@ -424,3 +424,24 @@ def ink_profile(edges, low, high, step):
                     справа[r] = x
             r += 1
     return InkProfile(low, step, слева, справа)
+
+
+def slant_of(italic_angle):
+    """Сдвиг по x на единицу высоты у курсива: тангенс наклона вправо"""
+    if not italic_angle:
+        return 0.0
+    return math.tan(math.radians(-float(italic_angle)))
+
+
+def deskewed(профиль, сдвиг, y0=0.0):
+    """Профиль курсива, выпрямленный по углу наклона: строка на высоте y
+    сдвинута на −(y − y0)·сдвиг. Просвет двух знаков в одной строке не
+    меняется, меняются крайние точки и тени — как у прямого рисунка"""
+    if профиль is None or not сдвиг:
+        return профиль
+    слева, справа = [], []
+    for i, (л, п) in enumerate(zip(профиль.left, профиль.right)):
+        dx = (профиль.low + (i + 0.5) * профиль.step - y0) * сдвиг
+        слева.append(None if л is None else л - dx)
+        справа.append(None if п is None else п - dx)
+    return InkProfile(профиль.low, профиль.step, слева, справа)
