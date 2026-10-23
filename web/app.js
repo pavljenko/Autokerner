@@ -49,8 +49,8 @@
     writing: ['записываю шрифт', 'writing the font'],
     checking: ['сверяю записанное', 'checking the result'],
     stopped: ['Остановлено. Шрифт не менялся.', 'Stopped. Nothing was changed.'],
-    foot: ['Расчёт идёт в вашем браузере, файл никуда не загружается. Автокернер бесплатный, с открытым кодом. Для FontLab 8 есть сценарий с тем же расчётом — он работает и с вариативными шрифтами. Нашли ошибку? <a href="mailto:pavljenko@ya.ru">pavljenko@ya.ru</a>',
-           'Everything runs in your browser; the file is not uploaded anywhere. Autokerner is free and open source. There is also a script for FontLab 8 with the same calculation — it works with variable fonts too. Found a bug? <a href="mailto:pavljenko@ya.ru">pavljenko@ya.ru</a>'],
+    foot: ['Расчёт идёт в вашем браузере, файл никуда не загружается. Автокернер бесплатный, с открытым кодом. Для FontLab 8 есть <a href="/product/autokerner">сценарий</a> с тем же расчётом — он работает и с вариативными шрифтами. Нашли ошибку? <a href="mailto:pavljenko@ya.ru">pavljenko@ya.ru</a>',
+           'Everything runs in your browser; the file is not uploaded anywhere. Autokerner is free and open source. There is also a <a href="/product/autokerner?lang=en">script for FontLab 8</a> with the same calculation — it works with variable fonts too. Found a bug? <a href="mailto:pavljenko@ya.ru">pavljenko@ya.ru</a>'],
     unit_pct: ['%', '%']
   };
   var STORE = 'autokerner-web:options';

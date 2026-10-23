@@ -108,7 +108,7 @@ FontLab 8. Сценарий сделан и проверен в FontLab 8.4.3 н
 
 1. Скачайте [`dist/Autokerner.py`](dist/Autokerner.py) (кнопка **Download raw file**)
    или архив из [последнего выпуска](../../releases/latest) либо с
-   [pavljenko.ru](https://pavljenko.ru/blogs/scripts/autokerner).
+   [pavljenko.ru](https://pavljenko.ru/product/autokerner).
 2. Положите файл в папку сценариев FontLab 8:
    - macOS: `~/Library/Application Support/FontLab/FontLab 8/Scripts`
    - Windows: `%APPDATA%\FontLab\FontLab 8\Scripts`

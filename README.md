@@ -111,7 +111,7 @@ needed.
 
 1. Download [`dist/Autokerner.py`](dist/Autokerner.py) (the **Download raw file** button),
    or the ZIP from the [latest release](../../releases/latest) or from
-   [pavljenko.ru](https://pavljenko.ru/blogs/scripts/autokerner).
+   [pavljenko.ru](https://pavljenko.ru/product/autokerner?lang=en).
 2. Put it into the FontLab 8 scripts folder:
    - macOS: `~/Library/Application Support/FontLab/FontLab 8/Scripts`
    - Windows: `%APPDATA%\FontLab\FontLab 8\Scripts`

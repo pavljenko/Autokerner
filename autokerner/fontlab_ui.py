@@ -357,6 +357,11 @@ def t(key):
     return _TEXT[key][LANG]
 
 
+def support_url():
+    """Страница скрипта с кнопкой «Поддержать» — на языке окна"""
+    return SUPPORT_URL + ("?lang=en" if LANG == 1 else "")
+
+
 # Сообщения о ходе и ошибки идут из расчёта и моста по-русски; окно на
 # английском переводит их здесь
 _TR_EN = [(re.compile(шаблон), замена) for шаблон, замена in (
@@ -815,7 +820,7 @@ class Window:
         self._open_url(SITE_URL)
 
     def _open_support(self):
-        self._open_url(SUPPORT_URL)
+        self._open_url(support_url())
 
     def _note(self, текст):
         """Серая мелкая подпись в одну строку (для нижней строки окна)"""
@@ -1915,7 +1920,7 @@ class Window:
             # после удачной записи — одна тихая строка о поддержке, без окон
             self._show_summary(_e(t("applied_banner") % (
                 записано["glyphs"], _n(записано["cells"]), _n(записано["pairs"]), сверка))
-                + "<br><small><a href='%s'>%s</a></small>" % (_e(SUPPORT_URL), _e(t("support_after"))))
+                + "<br><small><a href='%s'>%s</a></small>" % (_e(support_url()), _e(t("support_after"))))
         except Exception as ошибка:
             self._error(ошибка)
         finally:
