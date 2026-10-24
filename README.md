@@ -26,8 +26,13 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   with an entry stroke, a hook or an arc at the top left with no serif at the
   foot, as in italics and handwritten faces, the white behind the entry and
   behind the exit at the bottom right also counts three quarters and is
-  measured from the body of the letter, not from the tip of the stroke. Only glyphs that stand out from their own family are changed, so the font keeps its
-  overall looseness or tightness. Accented letters follow their base letter,
+  measured from the body of the letter, not from the tip of the stroke. The
+  default colour is 10% denser than the plain area rule, closer to how display
+  type is spaced by hand: every glyph of a group moves by the same amount for
+  that, punctuation and the word space follow. Beyond that, only glyphs that
+  stand out from their own family are changed. Proportional figures are spaced
+  against the lowercase or the capitals, whichever height they have; tabular
+  figures are left alone. Accented letters follow their base letter,
   composites move with their base, punctuation is spaced against the stem of a
   straight letter. A word space that is much wider than the rule is narrowed
   to the edge of the tolerance, or, if you choose, all the way to the target.
@@ -42,8 +47,11 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   baseline and the x-height or cap height, outlines never come closer than
   2.5% of the em; ascenders, descenders and swashes may overlap, as they do in
   designers' own fonts. Figures never run into each other across `, . :`
-  (7,4 · 3.5 · 12:30), and marks at different heights, such as a quote and a
-  comma, are not moved under each other. Combining marks, standalone accents
+  (7,4 · 3.5 · 12:30), proportional figures are kerned with each other, and
+  marks at different heights, such as a quote and a comma, are not moved under
+  each other. No glyph is clamped between the ink of its neighbour above and
+  below within the line, like a hyphen pushed into the fork of k or x: such a
+  pair is kerned only up to that point. Combining marks, standalone accents
   and the underscore are not kerned: they never stand next to letters in text.
   No pair is pushed apart by more than 15% of the em. Pairs are grouped into
   classes with values per master; pairs that do not fit their class are
@@ -60,7 +68,9 @@ to the unit on the test fonts, including a variable font with nine masters.
 ## Results
 
 Before and after on real fonts: a text face, a slab display face, a text serif
-and an art deco display face. Red marks what was off before the run.
+and an art deco display face. Red marks what was off before the run. The
+slides were made with version 0.3, in the font's own colour (Looseness +11% in
+0.4).
 
 ![A text face, before and after](docs/images/08-drafting-forum.png)
 
@@ -178,10 +188,11 @@ pass before manual work.
 - On fonts that are already carefully spaced, the rule still moves some
   letters: about a third of the Latin and Cyrillic letters of ten well-spaced
   fonts, by about 2.5% of the em on average (both sides together). For such
-  fonts, calculate only the glyphs you select, or use **add to it** for
-  kerning.
-- The overall tightness of the font is kept. If you want the whole font
-  tighter or looser, use the looseness setting or the Display preset.
+  fonts, set Looseness to +11% (the font's own colour), calculate only the
+  glyphs you select, or use **add to it** for kerning.
+- By default the whole font becomes about 10% denser. Looseness counts from
+  that default: +11% keeps the font's own colour, negative values and the
+  Display preset go tighter still.
 - Connecting scripts are not supported: changing sidebearings breaks the
   joins.
 - Only horizontal metrics are changed. Outlines are not redrawn; a glyph

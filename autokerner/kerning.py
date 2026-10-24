@@ -48,7 +48,8 @@ class KernLaw:
 
     def __init__(self, threshold=10, strength=1.0, clearance=25, figures=FIGURES_RULE,
                  neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False, lower_overhang=False,
-                 robust_heights=False, guard_body=False, slant=False):
+                 robust_heights=False, guard_body=False, slant=False, figure_pairs=False,
+                 enclosure=False):
         self.letters = LawPart(0.45, 40, 3)
         self.low = LawPart(0.40, 0, 1)
         self.high = LawPart(0.48, 0, 1)
@@ -78,6 +79,10 @@ class KernLaw:
         self.guard_body = guard_body
         # курсив меряется вдоль наклона (`slant_for`)
         self.slant = slant
+        # пары «цифра + цифра» кернятся, если цифры разной ширины (`_pairs`)
+        self.figure_pairs = figure_pairs
+        # знак не зажимается чернилами соседа сверху и снизу (`stop_enclosure`)
+        self.enclosure = enclosure
 
     def part(self, kind):
         return (self.letters, self.low, self.high, self.middle)[kind]
@@ -734,6 +739,9 @@ def make_matrix(master, law, names=None, progress=None):
                                      getattr(law, "figures", FIGURES_RULE))
     if getattr(law, "marks_apart", False):
         marks_apart(значения, сторож, n, знаки, зазор, law.threshold * float(upm) / 1000)
+    if getattr(law, "enclosure", False):
+        stop_enclosure(значения, сторож, n, знаки, _row(grid, 0), _row(grid, капитель_тела), upm,
+                       law.threshold * float(upm) / 1000)
     return KernMatrix(имена, скодом, цифры, значения, сторож, зазор,
                       [(имена[a], имена[b], имена[c], г) for a, b, c, г in столкновения])
 
@@ -765,11 +773,16 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
     по_телу = bool(getattr(law, "guard_body", False))
     тела_строки = [(ф.body_lo, ф.body_hi) for ф in знаки]
     законы_основ = {}
+    # пропорциональные цифры кернятся и между собой (поправка окна, вне
+    # исходного правила: там пары цифр не кернятся никогда — цифры считаются
+    # табличными); табличные (одной ширины) — по-прежнему нет
+    цифры_вместе = bool(getattr(law, "figure_pairs", False)) \
+        and len({знаки[i].advance for i in range(n) if цифры[i]}) > 1
     for л in range(n):
         if progress and л % 32 == 0:
             progress(л, n)
         фл = знаки[л]
-        цифра_л = цифры[л]
+        цифра_л = цифры[л] and not цифры_вместе
         вид_л = фл.kind
         род_л = род[вид_л]
         тело_л = тела[л]
@@ -1021,6 +1034,99 @@ def marks_apart(значения, запасы, n, знаки, зазор, по�
             if v < 0:
                 # класс не вправе поджать пару сильнее
                 запасы[к] = clamp16(int(max(0, габарит + v - зазор) // 1))
+
+
+# зазор «охвата»: чернила соседа заходят за край знака меньше чем на 2 %
+# кегля — не охват (шершавые контуры, касания засечек)
+ENCLOSURE_GAP = 0.02
+
+
+def _enclosure_rows(ф, от, до):
+    """Края знака в теле строки и что над и под каждой строкой: для правого
+    края — меньший из максимумов выше и ниже (докуда знак обнимает строку
+    с обеих сторон), для левого — больший из минимумов"""
+    R = ф.R[от:до + 1]
+    L = ф.L[от:до + 1]
+    k = len(R)
+    обнимает = [-INF] * k
+    выше = -INF
+    for r in range(k - 1, -1, -1):
+        обнимает[r] = выше
+        if R[r] > выше:
+            выше = R[r]
+    ниже = -INF
+    for r in range(k):
+        if ниже < обнимает[r]:
+            обнимает[r] = ниже
+        if R[r] > ниже:
+            ниже = R[r]
+    обнят = [INF] * k
+    выше = INF
+    for r in range(k - 1, -1, -1):
+        обнят[r] = выше
+        if L[r] < выше:
+            выше = L[r]
+    ниже = INF
+    for r in range(k):
+        if ниже > обнят[r]:
+            обнят[r] = ниже
+        if L[r] < ниже:
+            ниже = L[r]
+    return R, L, обнимает, обнят
+
+
+def stop_enclosure(значения, запасы, n, знаки, от, до, upm, порог):
+    """Стоп «охвата» (поправка окна, вне исходного правила; аксиома L-14 в
+    диссертации Н. Уиллиса): кернинг не задвигает знак так, чтобы часть его
+    оказалась зажата чернилами соседа и сверху, и снизу в теле строки —
+    дефис в развилке k, x, Ж, скобка у J. Сторож зазора такого не видит:
+    в одной строке чернила не сходятся. Пара слабеет ровно до границы, где
+    охвата нет, раздвигать не раздвигает. Опыт на 56 шрифтах 24.10.2026:
+    пар с охватом 3 899 → 1 338 (остаток — в рисунке и полях самих знаков),
+    ровность белого частых пар не меняется"""
+    if до < от:
+        return
+    зазор = ENCLOSURE_GAP * upm
+    края = [_enclosure_rows(ф, от, до) for ф in знаки]
+    # грубые границы, чтобы не мерить пары, где охвата не может быть
+    макс_обнимает = [max(к[2]) for к in края]
+    макс_R = [max(к[0]) for к in края]
+    мин_L = [min(к[1]) for к in края]
+    мин_обнят = [min(к[3]) for к in края]
+    далеко = 0.1 * upm
+    for л in range(n):
+        R_л, _, обнимает_л, _ = края[л]
+        if макс_R[л] == -INF:
+            continue
+        ширина = знаки[л].advance
+        строка = л * n
+        for п in range(n):
+            к = строка + п
+            v = значения[к]
+            if v >= 0:
+                continue
+            _, L_п, _, обнят_п = края[п]
+            грубо = max(макс_обнимает[л] - мин_L[п], макс_R[л] - мин_обнят[п]) - зазор - ширина
+            if грубо < v - далеко:
+                continue
+            граница = -INF
+            for a, b in zip(обнимает_л, L_п):
+                if a - b > граница:
+                    граница = a - b
+            for a, b in zip(R_л, обнят_п):
+                if a - b > граница:
+                    граница = a - b
+            if граница == -INF:
+                continue
+            предел = граница - зазор - ширина
+            if v < предел:
+                v = min(0, int(math.ceil(предел)))
+                if abs(v) < порог:
+                    v = 0
+                значения[к] = v
+            if v < 0:
+                # класс не вправе поджать пару обратно в охват
+                запасы[к] = min(запасы[к], clamp16(int(max(0.0, v - предел) // 1)))
 
 
 def _number_marks(значения, запасы, n, знаки, коды, цифры, master, рост, law):

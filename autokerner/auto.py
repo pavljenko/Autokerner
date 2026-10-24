@@ -94,7 +94,7 @@ def run(masters, spacing_rule=None, kern_rule=None, progress=None, kern=True, op
         spacing_rule = options.spacing_rule()
         kern_rule = options.kern_rule()
         закон = options.kern_law()
-        looseness = options.looseness / 100.0
+        looseness = options.total_looseness()
         do_spacing, do_space, kern = options.spacing, options.space, options.kerning
         round_to, max_tight, max_loose = options.kern_round, options.kern_max_tight, options.kern_max_loose
     правило = spacing_rule or SpacingRule()

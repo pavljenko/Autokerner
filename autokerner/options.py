@@ -1,11 +1,14 @@
 """Настройки расчёта и записи — то, что пользователь выбирает в окне.
 
 Числа правила по умолчанию — исходное правило как есть; поверх него окно
-по умолчанию включает шесть поправок: пробел сужается только до края
+по умолчанию включает поправки: пробел сужается только до края
 допуска, цифры с запятой и точкой не сходятся, обычный карман шрифта
 берётся по медиане, знаки препинания на разной высоте (кавычка и
 запятая) не заходят друг под друга, метки, отдельные акценты и «_» не
-кернятся, пара не раздвигается сильнее 150 тысячных кегля.
+кернятся, пара не раздвигается сильнее 150 тысячных кегля; с 0.4 — общая
+плотность на 10 % выше исходного правила (все знаки разом, ползунок
+«Разрядка» отсчитывается от неё), пропорциональные цифры ставятся и
+кернятся, знак не зажимается соседом сверху и снизу.
 `Options.classic()` — исходное правило без поправок:
 с ним итог совпадает с исходным расчётом до единицы. Наборы («Текст»,
 «Заголовки», «Лёгкий кернинг») — отправные точки, после выбора любой
@@ -60,6 +63,11 @@ class Options:
     kern_guard_body = True       # буквы раздвигаются только за сход в теле строки
     italic_slant = True          # курсив меряется вдоль угла наклона
     spacing_cursive = True       # у рукописного строения белое за входом — от тела
+    spacing_density = -10        # общая плотность окна, %: от неё отсчитывается ползунок «Разрядка»
+    spacing_even_density = True  # разрядка двигает все знаки группы, порог — только выравнивание
+    spacing_figures = True       # пропорциональные цифры — по норме своей группы
+    kern_figure_pairs = True     # пропорциональные цифры кернятся между собой
+    kern_enclosure = True        # знак не зажимается чернилами соседа сверху и снизу
     kern_mode = REPLACE          # REPLACE — заменить целиком; MERGE — дописать к своему
 
     FIELDS = ("spacing", "space", "kerning", "glyphs", "keep_marked", "keep_metric_keys",
@@ -68,7 +76,8 @@ class Options:
               "kern_round", "kern_max_tight", "kern_figures", "kern_mode", "space_edge",
               "kern_neutral", "kern_marks_apart", "kern_max_loose", "kern_skip_nontext",
               "spacing_optical", "kern_lower_overhang", "heights_by_letters",
-              "kern_guard_body", "italic_slant", "spacing_cursive")
+              "kern_guard_body", "italic_slant", "spacing_cursive", "spacing_density",
+              "spacing_even_density", "spacing_figures", "kern_figure_pairs", "kern_enclosure")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -107,7 +116,8 @@ class Options:
                 nbsp_follows_space=False, kern_marks_apart=False, kern_max_loose=0,
                 kern_skip_nontext=False, spacing_optical=False, kern_lower_overhang=False,
                 heights_by_letters=False, kern_guard_body=False, italic_slant=False,
-                spacing_cursive=False)
+                spacing_cursive=False, spacing_density=0, spacing_even_density=False,
+                spacing_figures=False, kern_figure_pairs=False, kern_enclosure=False)
         for k, v in kw.items():
             setattr(o, k, v)
         return o
@@ -116,7 +126,8 @@ class Options:
         return SpacingRule(threshold=self.spacing_threshold, word_gap=self.word_gap / 100.0,
                            word_gap_edge=bool(self.space_edge), soft=bool(self.spacing_optical),
                            robust_heights=bool(self.heights_by_letters), slant=bool(self.italic_slant),
-                           cursive=bool(self.spacing_cursive))
+                           cursive=bool(self.spacing_cursive), even_density=bool(self.spacing_even_density),
+                           figures=bool(self.spacing_figures))
 
     def kern_rule(self):
         return KernRule(threshold=self.kern_threshold, visible=self.kern_precision,
@@ -129,7 +140,13 @@ class Options:
                        skip_nontext=bool(self.kern_skip_nontext),
                        lower_overhang=bool(self.kern_lower_overhang),
                        robust_heights=bool(self.heights_by_letters),
-                       guard_body=bool(self.kern_guard_body), slant=bool(self.italic_slant))
+                       guard_body=bool(self.kern_guard_body), slant=bool(self.italic_slant),
+                       figure_pairs=bool(self.kern_figure_pairs), enclosure=bool(self.kern_enclosure))
+
+    def total_looseness(self):
+        """Разрядка расчёта в долях: общая плотность окна и ползунок вместе
+        (−10 % и ползунок 0 → −0,1; ползунок +10 → −0,01)"""
+        return (1.0 + self.spacing_density / 100.0) * (1.0 + self.looseness / 100.0) - 1.0
 
     def is_default_rule(self):
         """Числа правила — как по умолчанию (поправки окна не в счёт)"""

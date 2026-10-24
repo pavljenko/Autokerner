@@ -52,13 +52,23 @@ class SpacingRule:
     выходом строчных от тела стороны (`cursive_of`, поправка окна, вне
     исходного правила): cursive_entry — вынос входа над телом, с которого
     он входом считается (доля кегля), cursive_body — доля высоты стороны,
-    где ищется тело."""
+    где ищется тело.
+
+    even_density — разрядка (`looseness` у `plan`) двигает все знаки группы
+    одинаково, а порог решает только, выравнивать ли знак (поправка окна,
+    вне исходного правила). В исходном правиле разрядка просто умножает
+    эталон, и знак сдвигается, только если весь сдвиг больше порога: при
+    −10 % строчные уходят на 5–8 единиц, порог 12 — и поджимаются лишь
+    выбившиеся знаки, ровный шрифт становится пёстрым.
+
+    figures — пропорциональные цифры по норме своей группы (`figure_items`,
+    поправка окна): табличные не трогаются."""
 
     def __init__(self, depth=0.07, overshoot=0.0, threshold=12, word_gap=0.47,
                  word_gap_slack=0.25, word_gap_edge=False, soft=False, plateau=0.03, tail=0.07,
                  shelter_slope=1.0, shelter_weight=0.0, serif_weight=0.75, serif_depth=0.08,
                  serif_flat=0.01, robust_heights=False, slant=False, cursive=False,
-                 cursive_entry=0.04, cursive_body=0.6):
+                 cursive_entry=0.04, cursive_body=0.6, even_density=False, figures=False):
         self.depth = depth
         self.overshoot = overshoot
         self.threshold = threshold
@@ -78,6 +88,8 @@ class SpacingRule:
         self.cursive = cursive
         self.cursive_entry = cursive_entry
         self.cursive_body = cursive_body
+        self.even_density = even_density
+        self.figures = figures
 
 
 class SpaceTarget:
@@ -92,12 +104,15 @@ class SpaceTarget:
 
 
 class SpacingItem:
-    """Что правило говорит об одном знаке"""
+    """Что правило говорит об одном знаке. `dense_left`, `dense_right` — часть
+    сдвига от общей разрядки (`even_density`); знак с ней правится и ниже
+    порога (`forced`): разрядка касается всех знаков группы"""
     __slots__ = ("name", "code", "group", "advance", "lsb", "rsb", "white_left", "white_right",
-                 "target_lsb", "target_rsb", "target_advance", "derived")
+                 "target_lsb", "target_rsb", "target_advance", "derived", "dense_left", "dense_right",
+                 "forced")
 
     def __init__(self, name, code, group, advance, lsb, rsb, white_left, white_right,
-                 target_lsb, target_rsb, target_advance, derived=False):
+                 target_lsb, target_rsb, target_advance, derived=False, dense_left=0, dense_right=0):
         self.name = name
         self.code = code
         self.group = group
@@ -110,6 +125,9 @@ class SpacingItem:
         self.target_rsb = target_rsb
         self.target_advance = target_advance
         self.derived = derived
+        self.dense_left = dense_left
+        self.dense_right = dense_right
+        self.forced = bool(dense_left or dense_right) and (target_lsb != lsb or target_rsb != rsb)
 
     @property
     def delta_left(self):
@@ -123,10 +141,15 @@ class SpacingItem:
     def shift(self):
         return max(abs(self.delta_left), abs(self.delta_right))
 
+    def applied(self, порог):
+        """Знак правится: выбился за порог, пришёл от правленой базы или
+        сдвинут общей разрядкой"""
+        return self.derived or self.forced or self.shift >= порог
+
     def copy(self):
         return SpacingItem(self.name, self.code, self.group, self.advance, self.lsb, self.rsb,
                            self.white_left, self.white_right, self.target_lsb, self.target_rsb,
-                           self.target_advance, self.derived)
+                           self.target_advance, self.derived, self.dense_left, self.dense_right)
 
 
 class SpacingPlan:
@@ -148,7 +171,7 @@ class SpacingPlan:
         """Знаки, выбившиеся из правила, — от худшего к лучшему; составные
         идут независимо от порога: они заведены только для правленых баз"""
         порог = self.threshold_units
-        вышло = [з for з in self.items if з.derived or з.shift >= порог]
+        вышло = [з for з in self.items if з.applied(порог)]
         вышло.sort(key=lambda з: (-з.shift, з.name))
         return вышло
 
@@ -674,9 +697,13 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     elif UPPER in эталоны:
         доля = ростКапители / капитель
         эталоны[SMALLCAP] = эталоны[UPPER] * доля * доля
+    # без разрядки: по ним решается, выбился ли знак, если разрядка общая
+    эталоны_ровно = dict(эталоны)
     if looseness:
         for г in эталоны:
             эталоны[г] *= 1.0 + looseness
+    общая = bool(looseness) and rule.even_density
+    порог = rule.threshold * upm / 1000
 
     # ── целевые отступы: за раз не дальше полупросвета между штамбами ──
     def полпросвета(коды, y):
@@ -707,17 +734,31 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         цельП = эталоны.get(з.группаСправа)
         if цельЛ is None or цельП is None:
             continue
-        сдвигЛ = в_пределе((цельЛ - з.белоеСлева) / з.высотаСлева, з.группа)
-        сдвигП = в_пределе((цельП - з.белоеСправа) / з.высотаСправа, з.группаСправа)
-        новыйL = irnd(float(з.lsb) + сдвигЛ)
-        новыйR = irnd(float(з.rsb) + сдвигП)
+        плотЛ = плотП = 0
+        if общая:
+            # выравнивание — против эталона без разрядки и только за порогом;
+            # разрядка — одна на группу: (цель − цель без разрядки) / высота
+            сдвигЛ = в_пределе((эталоны_ровно[з.группа] - з.белоеСлева) / з.высотаСлева, з.группа)
+            сдвигП = в_пределе((эталоны_ровно[з.группаСправа] - з.белоеСправа) / з.высотаСправа,
+                               з.группаСправа)
+            if max(abs(irnd(float(з.lsb) + сдвигЛ) - з.lsb), abs(irnd(float(з.rsb) + сдвигП) - з.rsb)) < порог:
+                сдвигЛ = сдвигП = 0.0
+            плотЛ = irnd((цельЛ - эталоны_ровно[з.группа]) / з.высотаСлева)
+            плотП = irnd((цельП - эталоны_ровно[з.группаСправа]) / з.высотаСправа)
+            новыйL = irnd(float(з.lsb) + сдвигЛ) + плотЛ
+            новыйR = irnd(float(з.rsb) + сдвигП) + плотП
+        else:
+            сдвигЛ = в_пределе((цельЛ - з.белоеСлева) / з.высотаСлева, з.группа)
+            сдвигП = в_пределе((цельП - з.белоеСправа) / з.высотаСправа, з.группаСправа)
+            новыйL = irnd(float(з.lsb) + сдвигЛ)
+            новыйR = irnd(float(з.rsb) + сдвигП)
         if з.имя in fixed:
             новыйL, новыйR = з.lsb, з.rsb
+            плотЛ = плотП = 0
         чернила = з.advance - з.lsb - з.rsb
         items.append(SpacingItem(з.имя, з.код, з.группа, з.advance, з.lsb, з.rsb,
                                  з.белоеСлева, з.белоеСправа, новыйL, новыйR,
-                                 новыйL + чернила + новыйR))
-    порог = rule.threshold * upm / 1000
+                                 новыйL + чернила + новыйR, dense_left=плотЛ, dense_right=плотП))
 
     # ── знак с диакритикой — по своей основе ──
     измеренные = {}
@@ -743,6 +784,8 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
             items[и].target_lsb = знак.lsb + основа.delta_left
             items[и].target_rsb = знак.rsb + основа.delta_right
             items[и].target_advance = знак.advance + основа.delta_left + основа.delta_right
+            items[и].dense_left, items[и].dense_right = основа.dense_left, основа.dense_right
+            items[и].forced = основа.forced and (основа.delta_left != 0 or основа.delta_right != 0)
         elif abs(ширина - ширина_базы) <= порог:
             левое_базы = базы[0] + float(основа.delta_left)
             правое_базы = float(основа.advance) - базы[1] + float(основа.delta_right)
@@ -751,6 +794,8 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
             items[и].target_lsb = знак.lsb + сдвигЛ
             items[и].target_rsb = знак.rsb + сдвигП
             items[и].target_advance = знак.advance + сдвигЛ + сдвигП
+            items[и].dense_left, items[и].dense_right = основа.dense_left, основа.dense_right
+            items[и].forced = основа.forced and (сдвигЛ != 0 or сдвигП != 0)
 
     # ── составные наследуют метрики базы ──
     по_имени = {з.name: з for з in items}
@@ -760,7 +805,7 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         основа = next((по_имени[master.name(б)] for б in базы if master.name(б) in по_имени), None)
         if основа is None:
             continue
-        if not float(основа.shift) >= порог:
+        if not основа.applied(порог):
             continue
         advance = master.advance(i)
         разница = основа.target_advance - основа.advance
@@ -772,17 +817,27 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         items.append(SpacingItem(master.name(i), код, основа.group, advance, lsb, rsb,
                                  основа.white_left, основа.white_right,
                                  lsb + основа.delta_left, rsb + основа.delta_right,
-                                 advance + разница, derived=True))
+                                 advance + разница, derived=True, dense_left=основа.dense_left,
+                                 dense_right=основа.dense_right))
+
+    # ── цифры — после составных: верхние и дробные индексы из компонентов
+    # цифр за ними не едут ──
+    if rule.figures:
+        items += figure_items(master, rule, эталоны, эталоны_ровно, замеры, шаг, в_пределе, порог,
+                              общая, fixed)
 
     # ── знаки препинания: своя мера, против штамба прямой буквы ──
     items += [з for з in mark_items(master, items, rule.threshold * upm / 1000, рост, капитель, rule)
               if з.name not in fixed]
+    ширины = {з.name: з.target_advance for з in items if общая and з.applied(порог)}
     return SpacingPlan(items, rule, эталоны, master.upm, профили, высотаЗоны,
-                       space_target(master, rule))
+                       space_target(master, rule, ширины))
 
 
-def space_target(master, rule=None):
-    """Цель по ширине межсловного пробела — доля медианной строчной"""
+def space_target(master, rule=None, ширины=None):
+    """Цель по ширине межсловного пробела — доля медианной строчной;
+    `ширины` — ширины знаков после расчёта (при общей разрядке строчные
+    уже, и пробел меряется по ним)"""
     rule = rule or SpacingRule()
     пробел = master.glyph(0x20)
     if пробел is None:
@@ -790,7 +845,7 @@ def space_target(master, rule=None):
     ширина = master.advance(пробел)
     if ширина <= 0:
         return None
-    мед = median(lower_widths(master, LOWER, rule.robust_heights))
+    мед = median(lower_widths(master, LOWER, rule.robust_heights, ширины))
     if not мед > 0:
         return None
     цель = rnd(мед * rule.word_gap)
@@ -801,7 +856,7 @@ def space_target(master, rule=None):
     return SpaceTarget(ширина, int(цель), мед, rule.word_gap, выбился)
 
 
-def lower_widths(master, г, robust=False):
+def lower_widths(master, г, robust=False, ширины=None):
     from .geometry import contours_rect
     upm, капитель, рост = heights(master, robust)
     капитель = max(капитель, рост + 1)
@@ -815,7 +870,7 @@ def lower_widths(master, г, robust=False):
         рамка = contours_rect(знак.contours)
         if рамка is None or out_of_line(рамка, капитель if г == UPPER else рост):
             continue
-        вышло.append(float(знак.advance))
+        вышло.append(float((ширины or {}).get(знак.name, знак.advance)))
     return вышло
 
 
@@ -928,10 +983,15 @@ def _protruding_sides(master, glyph, поля, верх, rule):
 
 def mark_items(master, letters, порог, рост, капитель, rule=None):
     """Апроши знаков препинания — с кодом и их варианты без кода
-    («parenleft.case» берёт норму «(» и меряется против «H»)"""
+    («parenleft.case» берёт норму «(» и меряется против «H»).
+
+    При общей разрядке (у буквы-эталона есть `dense_left`/`dense_right`)
+    выбился ли знак, решается против буквы без разрядки, а разрядка
+    переходит на знак той же долей просвета: белое «буква + знак» сжимается
+    так же, как просвет между штамбами"""
     from .geometry import contours_rect
 
-    def эталон(коды, высота):
+    def эталон(коды, высота, с_разрядкой=True):
         for к in коды:
             i = master.glyph(к)
             if i is None:
@@ -943,17 +1003,25 @@ def mark_items(master, letters, порог, рост, капитель, rule=Non
                 поля = _protruding_sides(master, i, поля, 2 * высота, rule)
             имя = master.name(i)
             своя = next((з for з in letters if з.name == имя and not з.derived), None)
-            if своя is not None and float(своя.shift) >= порог:
-                поля = (поля[0] + float(своя.delta_left), поля[1] + float(своя.delta_right))
+            if своя is not None and своя.applied(порог):
+                dl, dr = своя.delta_left, своя.delta_right
+                if not с_разрядкой:
+                    dl -= своя.dense_left
+                    dr -= своя.dense_right
+                поля = (поля[0] + float(dl), поля[1] + float(dr))
             return поля
         return None
 
-    строчная = эталон([0x6E, 0x43D, 0x48, 0x41D], рост / 2)
-    прописная = эталон([0x48, 0x41D], капитель / 2)
+    строчная = эталон([0x6E, 0x43D, 0x48, 0x41D], рост / 2, False)
+    прописная = эталон([0x48, 0x41D], капитель / 2, False)
     if прописная is None:
         прописная = строчная
     if строчная is None and прописная is None:
         return []
+    строчная_р = эталон([0x6E, 0x43D, 0x48, 0x41D], рост / 2)
+    прописная_р = эталон([0x48, 0x41D], капитель / 2)
+    if прописная_р is None:
+        прописная_р = строчная_р
 
     основы = {}
     for код in sorted(master.cmap):
@@ -976,8 +1044,10 @@ def mark_items(master, letters, порог, рост, капитель, rule=Non
                 хвост = имя[точка:].lower()
                 прописной = "case" in хвост or "cap" in хвост
         поля = прописная if прописной else строчная
+        поля_р = прописная_р if прописной else строчная_р
         if поля is None:
             поля = прописная if прописная is not None else строчная
+            поля_р = прописная_р if прописная_р is not None else строчная_р
         if норма is None or поля is None:
             continue
         if master.component_bases(i):
@@ -1001,9 +1071,92 @@ def mark_items(master, letters, порог, рост, капитель, rule=Non
 
         новыйL = поле(слева, норма[0], lsb, поля[1])
         новыйR = поле(справа, норма[1], rsb, поля[0])
+        плотЛ = плотП = 0
+        if поля_р is not None and поля_р != поля:
+            # разрядка: знак держит свою долю просвета (новую, если правится)
+            правится = max(abs(новыйL - lsb), abs(новыйR - rsb)) >= порог
+            if not правится:
+                новыйL, новыйR = lsb, rsb
+            долиЛ = норма[0].target(слева) if правится else слева
+            долиП = норма[1].target(справа) if правится else справа
+            просвет_р = поля_р[0] + поля_р[1]
+            плотЛ = irnd(долиЛ * (просвет_р - просвет) - (поля_р[1] - поля[1]))
+            плотП = irnd(долиП * (просвет_р - просвет) - (поля_р[0] - поля[0]))
+            новыйL += плотЛ
+            новыйR += плотП
         чернила = advance - lsb - rsb
         вышло.append(SpacingItem(имя, свой_код, OTHER, advance, lsb, rsb, 0.0, 0.0,
-                                 новыйL, новыйR, новыйL + чернила + новыйR))
+                                 новыйL, новыйR, новыйL + чернила + новыйR,
+                                 dense_left=плотЛ, dense_right=плотП))
+    return вышло
+
+
+def figure_items(master, rule, эталоны, эталоны_ровно, замеры, шаг, в_пределе, порог, общая, fixed):
+    """Пропорциональные цифры 0–9 (поправка окна, вне исходного правила):
+    белое в полосе от базовой линии до медианы верхов цифр, цель — белое на
+    строку той группы, чей рост у цифр: выше середины между ростом и
+    капителью — прописных, ниже — строчных (нет такой группы — другой).
+    Цифры одной ширины (табличные) не трогаются. В исходном правиле цифры
+    не мерятся вовсе, а кернинг файла заменяется целиком — у шрифтов, где
+    пары цифр кернились, они расходятся (опыт на 56 шрифтах 24.10.2026:
+    ровность цифр 18,7 % против 16,0 % у оригиналов; с этим и кернингом
+    пар цифр — 12,2 %)"""
+    from .geometry import contours_rect
+    цифры = []
+    for к in range(0x30, 0x3A):
+        i = master.glyph(к)
+        if i is None or master.component_bases(i):
+            continue
+        рамка = contours_rect(master.contours(i))
+        if рамка is None or master.advance(i) <= 0:
+            continue
+        цифры.append((к, i, рамка))
+    if len(цифры) < 10 or len({master.advance(i) for _, i, _ in цифры}) == 1:
+        return []
+    верх = median([р[3] for _, _, р in цифры])
+    _, капитель, рост = heights(master, rule.robust_heights)
+    г = UPPER if верх >= (рост + капитель) / 2 else LOWER
+    if г not in эталоны:
+        г = LOWER if г == UPPER else UPPER
+    if г not in эталоны:
+        return []
+    высоты = [з.высотаСлева for з in замеры if з.группа == г]
+    if not высоты:
+        return []
+    высота = median(высоты)
+    на_ряд = эталоны[г] / высота
+    на_ряд_ровно = эталоны_ровно[г] / высота
+    upm = float(master.upm)
+    вышло = []
+    for к, i, рамка in цифры:
+        знак = master.glyphs[i]
+        if знак.name in fixed:
+            continue
+        профиль = ink_profile(знак.edges, 0.0, верх, шаг)
+        if профиль is None:
+            continue
+        л, п, в = white_soft(профиль, float(знак.advance), rule, upm) if rule.soft \
+            else white(профиль, float(знак.advance), rule.depth * upm)
+        if not в > 0:
+            continue
+        lsb = irnd(рамка[0])
+        rsb = знак.advance - irnd(рамка[2])
+        плотЛ = плотП = 0
+        if общая:
+            новыйL = irnd(float(lsb) + в_пределе(на_ряд_ровно - л / в, г))
+            новыйR = irnd(float(rsb) + в_пределе(на_ряд_ровно - п / в, г))
+            if max(abs(новыйL - lsb), abs(новыйR - rsb)) < порог:
+                новыйL, новыйR = lsb, rsb
+            плотЛ = плотП = irnd(на_ряд - на_ряд_ровно)
+            новыйL += плотЛ
+            новыйR += плотП
+        else:
+            новыйL = irnd(float(lsb) + в_пределе(на_ряд - л / в, г))
+            новыйR = irnd(float(rsb) + в_пределе(на_ряд - п / в, г))
+        чернила = знак.advance - lsb - rsb
+        вышло.append(SpacingItem(знак.name, к, OTHER, знак.advance, lsb, rsb, л, п,
+                                 новыйL, новыйR, новыйL + чернила + новыйR,
+                                 dense_left=плотЛ, dense_right=плотП))
     return вышло
 
 

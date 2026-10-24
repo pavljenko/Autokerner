@@ -90,8 +90,10 @@ _TEXT = {
     "fine": ("Тонкая настройка", "Fine-tuning"),
     "sub_spacing": ("Апроши", "Spacing"),
     "looseness": ("Разрядка", "Looseness"),
-    "looseness_tip": ("Плотнее (−) или свободнее (+) всё вместе: эталон белого умножается на 1 + доля.",
-                      "Tighter (−) or looser (+) overall: the white-area target is scaled by 1 + share."),
+    "looseness_tip": ("Плотнее (−) или свободнее (+) всё вместе, от плотности по умолчанию: она на 10 % плотнее "
+                      "исходного правила, +11 % возвращает исходную. Все знаки группы сдвигаются одинаково.",
+                      "Tighter (−) or looser (+) overall, counted from the default colour, which is 10% denser than "
+                      "the plain rule; +11% brings the plain rule back. All glyphs of a group move alike."),
     "threshold": ("Чувствительность", "Sensitivity"),
     "threshold_tip": ("Знак правится, если поле уходит от правила больше чем на столько тысячных кегля. "
                       "Меньше — правок больше.",

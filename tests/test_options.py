@@ -69,8 +69,11 @@ class CorrectionsTest(unittest.TestCase):
     def test_wide_space_to_target_as_in_rule(self):
         """Выбор в окне «сузить до нормы» — пробел как в исходном правиле; набор возвращает умолчание"""
         m = [мастер(пробел=900, weight=300.0), мастер(пробел=900, weight=700.0)]
-        до_нормы = Options(kerning=False, space_edge=False)
+        до_нормы = Options(kerning=False, space_edge=False, spacing_density=0)
         self.assertEqual(auto.run(m, options=до_нормы).space, auto.run(m, kern=False).space)
+        # с общей плотностью строчные уже — и цель пробела меньше, от их новых ширин
+        плотно = auto.run(m, options=Options(kerning=False, space_edge=False)).space[0]
+        self.assertLess(плотно, auto.run(m, kern=False).space[0])
         self.assertFalse(Options.from_dict(до_нормы.to_dict()).space_edge)
         self.assertTrue(preset("display", до_нормы).space_edge)
 
@@ -368,3 +371,103 @@ class LowerOverhangTest(unittest.TestCase):
                 k, _ = kerning.kernel(л, п, часть, law.slopes.index(часть.slope),
                                       kerning.floor_of(вид, ctx.neutral_pocket), law, m.upm, ctx.usual_gap)
                 self.assertEqual(мат.values[мат.names.index(a) * мат.n + мат.names.index(b)], k, a + b)
+
+
+def с_цифрами(жир=80, широкие=True):
+    """Синтетика с десятью цифрами: разной ширины (пропорциональные) или одной"""
+    from autokerner.model import Glyph, Master
+    from tests.synthetic import прямоугольник
+    м = мастер(жир=жир)
+    знаки = [g for g in м.glyphs if g.name not in ("one", "two")]
+    for к in range(10):
+        ширина = (420 + 30 * к) if широкие else 560
+        x0 = 60 + 4 * к
+        if к == 7:
+            # «7» с перекладиной поверху: карман снизу, пары с ней кернятся
+            контуры = [прямоугольник(x0, 620, ширина - 60, 700),
+                       прямоугольник((x0 + ширина - 60) / 2 - 40, 0, (x0 + ширина - 60) / 2 + 40, 700)]
+        else:
+            # «4» ниже остальных: уходит под перекладину «7»
+            контуры = [прямоугольник(x0, 0, ширина - 60, 500 if к == 4 else 700)]
+        знаки.append(Glyph("d%d" % к, [0x30 + к], ширина, контуры))
+    знаки.append(Glyph("hyphen", [0x2D], 330, [прямоугольник(40, 230, 290, 300)]))
+    return Master(1000, знаки, x_height=500, cap_height=700, label="цифры", weight=400.0)
+
+
+class DensityTest(unittest.TestCase):
+    """Общая плотность окна: −10 % разом у всех знаков группы, без порога"""
+
+    def test_every_letter_moves_alike(self):
+        m = [мастер(жир=80)]
+        ровно = auto.run(m, options=Options(kerning=False, spacing_density=0)).plans[0]
+        плотно = auto.run(m, options=Options(kerning=False)).plans[0]
+        сдвиги = set()
+        for имя in ("n", "u", "o", "x"):
+            а, б = ровно.item(имя), плотно.item(имя)
+            # выравнивание то же, что без плотности (только за порогом)
+            правка = (а.delta_left, а.delta_right) if а.shift >= ровно.threshold_units else (0, 0)
+            сдвиги.add((б.delta_left - правка[0], б.delta_right - правка[1]))
+            self.assertTrue(б.applied(плотно.threshold_units))
+        # сдвиг плотности один на группу: −10 % белого на строку
+        self.assertEqual(len(сдвиги), 1)
+        dl, dr = сдвиги.pop()
+        self.assertLess(dl, 0)
+        self.assertEqual(dl, dr)
+
+    def test_classic_rule_untouched(self):
+        self.assertEqual(Options.classic().total_looseness(), 0.0)
+        self.assertAlmostEqual(Options().total_looseness(), -0.1)
+        self.assertAlmostEqual(Options(looseness=10).total_looseness(), -0.01)
+
+    def test_punctuation_follows_letters(self):
+        m = [мастер(жир=80)]
+        ровно = auto.run(m, options=Options(kerning=False, spacing_density=0)).plans[0].item("period")
+        плотно = auto.run(m, options=Options(kerning=False)).plans[0].item("period")
+        self.assertLess(плотно.target_lsb + плотно.target_rsb, ровно.target_lsb + ровно.target_rsb)
+
+
+class FiguresTest(unittest.TestCase):
+    def test_proportional_figures_spaced_tabular_not(self):
+        r = auto.run([с_цифрами()], options=Options(kerning=False)).plans[0]
+        self.assertIsNotNone(r.item("d1"))
+        r = auto.run([с_цифрами(широкие=False)], options=Options(kerning=False)).plans[0]
+        self.assertIsNone(r.item("d1"))
+        r = auto.run([с_цифрами()], options=Options.classic(kerning=False)).plans[0]
+        self.assertIsNone(r.item("d1"))
+
+    def test_figure_pairs_kerned_only_when_proportional(self):
+        from autokerner.kerning import make_matrix
+        закон = Options().kern_law()
+        for широкие, есть in ((True, True), (False, False)):
+            м = с_цифрами(широкие=широкие)
+            мат = make_matrix(м, закон)
+            цифры = [i for i, имя in enumerate(мат.names) if имя.startswith("d")]
+            n = len(мат.names)
+            ненулевых = sum(1 for a in цифры for b in цифры if мат.values[a * n + b])
+            self.assertEqual(ненулевых > 0, есть)
+
+
+class EnclosureTest(unittest.TestCase):
+    def test_hyphen_not_clamped_in_fork(self):
+        from autokerner.kerning import ENCLOSURE_GAP, Grid, KernShape, make_shape, stop_enclosure, _row
+        from autokerner.geometry import Contour
+        from autokerner.model import Glyph, Master
+
+        def ломаная(*точки):
+            return Contour([("moveTo", точки[0])] + [("lineTo", p) for p in точки[1:]] + [("closePath",)])
+        # «k» с развилкой справа: плечо вверху, нога внизу, середина пуста
+        k = Glyph("k", [0x6B], 520, [ломаная((40, 0), (120, 0), (120, 700), (40, 700)),
+                                     ломаная((120, 230), (480, 500), (400, 500), (120, 290)),
+                                     ломаная((120, 210), (400, 0), (480, 0), (120, 270))])
+        дефис = Glyph("hyphen", [0x2D], 330, [ломаная((40, 230), (290, 230), (290, 300), (40, 300))])
+        м = Master(1000, [k, дефис], x_height=500, cap_height=700, label="охват", weight=400.0)
+        закон = Options().kern_law()
+        grid = Grid(1000)
+        ф = [make_shape(g.edges, g.advance, grid, 500, закон) for g in м.glyphs]
+        значения = [0, -200, 0, 0]       # k|hyphen задвинут глубоко в развилку
+        запасы = [32767] * 4
+        stop_enclosure(значения, запасы, 2, ф, _row(grid, 0), _row(grid, 700), 1000, 10)
+        self.assertGreater(значения[1], -200)
+        self.assertLessEqual(значения[1], 0)
+        # граница точная: ещё на 1 % плотнее — и дефис был бы зажат
+        self.assertLess(значения[1], 0)
