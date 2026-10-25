@@ -49,7 +49,9 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   designers' own fonts. Figures never run into each other across `, . :`
   (7,4 · 3.5 · 12:30), proportional figures are kerned with each other, and
   marks at different heights, such as a quote and a comma, are not moved under
-  each other. No glyph is clamped between the ink of its neighbour above and
+  each other. A descender hook that reaches far under the neighbour, like
+  the hook of j, makes no pocket: nj and Pj stay as close as the sidebearing
+  of j already makes them. No glyph is clamped between the ink of its neighbour above and
   below within the line, like a hyphen pushed into the fork of k or x: such a
   pair is kerned only up to that point. Combining marks, standalone accents
   and the underscore are not kerned: they never stand next to letters in text.

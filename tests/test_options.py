@@ -471,3 +471,45 @@ class EnclosureTest(unittest.TestCase):
         self.assertLessEqual(значения[1], 0)
         # граница точная: ещё на 1 % плотнее — и дефис был бы зажат
         self.assertLess(значения[1], 0)
+
+
+class PerSideTest(unittest.TestCase):
+    def test_only_the_side_that_stands_out_moves(self):
+        """Выбилась одна сторона — правится она, вторая стоит, как у дизайнера"""
+        from autokerner.model import Glyph, Master
+        from tests.synthetic import прямоугольник
+        м = мастер(жир=80)
+        # левое поле n на 60 шире, правое как было: правило двигает правое на 10
+        n = Glyph("n", [0x6E], 560, [прямоугольник(110, 0, 190, 500), прямоугольник(430, 0, 510, 500),
+                                     прямоугольник(110, 420, 510, 500)])
+        м2 = Master(1000, [g if g.name != "n" else n for g in м.glyphs], x_height=500, cap_height=700,
+                    label="n сдвинута", weight=400.0)
+        по_сторонам = auto.run([м2], options=Options(kerning=False, spacing_density=0,
+                                                      spacing_per_side=True)).plans[0].item("n")
+        целиком = auto.run([м2], options=Options(kerning=False, spacing_density=0,
+                                                  spacing_per_side=False)).plans[0].item("n")
+        self.assertEqual(по_сторонам.delta_left, целиком.delta_left)
+        self.assertLess(по_сторонам.delta_left, -12)
+        self.assertEqual(целиком.delta_right, 10)
+        self.assertEqual(по_сторонам.delta_right, 0)
+
+
+class BelowCutTest(unittest.TestCase):
+    def test_hook_under_neighbour_makes_no_pocket(self):
+        """Крючок «j», ушедший далеко влево под соседа, кармана не образует"""
+        from autokerner.geometry import Contour
+        from autokerner.kerning import make_matrix
+        from autokerner.model import Glyph, Master
+        from tests.synthetic import прямоугольник
+
+        def ломаная(*точки):
+            return Contour([("moveTo", точки[0])] + [("lineTo", p) for p in точки[1:]] + [("closePath",)])
+        n = Glyph("n", [0x6E], 500, [прямоугольник(50, 0, 130, 500), прямоугольник(370, 0, 450, 500),
+                                     прямоугольник(50, 420, 450, 500)])
+        # j: штамб и крючок под строкой, уходящий влево на 160 за штамб
+        j = Glyph("j", [0x6A], 230, [прямоугольник(100, -150, 180, 500), прямоугольник(-60, -230, 180, -150)])
+        м = Master(1000, [n, j], x_height=500, cap_height=700, label="nj", weight=400.0)
+        for cut, есть in ((False, True), (True, False)):
+            мат = make_matrix(м, Options(kern_below_cut=cut).kern_law())
+            i, k = мат.names.index("n"), мат.names.index("j")
+            self.assertEqual(мат.values[i * мат.n + k] < 0, есть)

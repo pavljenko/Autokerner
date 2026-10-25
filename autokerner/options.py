@@ -68,6 +68,9 @@ class Options:
     spacing_figures = True       # пропорциональные цифры — по норме своей группы
     kern_figure_pairs = True     # пропорциональные цифры кернятся между собой
     kern_enclosure = True        # знак не зажимается чернилами соседа сверху и снизу
+    spacing_per_side = False     # порог — за каждую сторону (опыт: ближе к дизайнеру хороших шрифтов,
+                                 # но неровные шрифты выравнивает хуже — 21 из 50 по замеру 25.10.2026)
+    kern_below_cut = True        # выносные ниже низа соседа кармана не образуют (j, y, Q)
     kern_mode = REPLACE          # REPLACE — заменить целиком; MERGE — дописать к своему
 
     FIELDS = ("spacing", "space", "kerning", "glyphs", "keep_marked", "keep_metric_keys",
@@ -77,7 +80,8 @@ class Options:
               "kern_neutral", "kern_marks_apart", "kern_max_loose", "kern_skip_nontext",
               "spacing_optical", "kern_lower_overhang", "heights_by_letters",
               "kern_guard_body", "italic_slant", "spacing_cursive", "spacing_density",
-              "spacing_even_density", "spacing_figures", "kern_figure_pairs", "kern_enclosure")
+              "spacing_even_density", "spacing_figures", "kern_figure_pairs", "kern_enclosure",
+              "spacing_per_side", "kern_below_cut")
 
     def __init__(self, **kw):
         for k, v in kw.items():
@@ -117,7 +121,8 @@ class Options:
                 kern_skip_nontext=False, spacing_optical=False, kern_lower_overhang=False,
                 heights_by_letters=False, kern_guard_body=False, italic_slant=False,
                 spacing_cursive=False, spacing_density=0, spacing_even_density=False,
-                spacing_figures=False, kern_figure_pairs=False, kern_enclosure=False)
+                spacing_figures=False, kern_figure_pairs=False, kern_enclosure=False,
+                spacing_per_side=False, kern_below_cut=False)
         for k, v in kw.items():
             setattr(o, k, v)
         return o
@@ -127,7 +132,7 @@ class Options:
                            word_gap_edge=bool(self.space_edge), soft=bool(self.spacing_optical),
                            robust_heights=bool(self.heights_by_letters), slant=bool(self.italic_slant),
                            cursive=bool(self.spacing_cursive), even_density=bool(self.spacing_even_density),
-                           figures=bool(self.spacing_figures))
+                           figures=bool(self.spacing_figures), per_side=bool(self.spacing_per_side))
 
     def kern_rule(self):
         return KernRule(threshold=self.kern_threshold, visible=self.kern_precision,
@@ -141,7 +146,8 @@ class Options:
                        lower_overhang=bool(self.kern_lower_overhang),
                        robust_heights=bool(self.heights_by_letters),
                        guard_body=bool(self.kern_guard_body), slant=bool(self.italic_slant),
-                       figure_pairs=bool(self.kern_figure_pairs), enclosure=bool(self.kern_enclosure))
+                       figure_pairs=bool(self.kern_figure_pairs), enclosure=bool(self.kern_enclosure),
+                       below_cut=bool(self.kern_below_cut))
 
     def total_looseness(self):
         """Разрядка расчёта в долях: общая плотность окна и ползунок вместе

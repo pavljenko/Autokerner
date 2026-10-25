@@ -49,7 +49,7 @@ class KernLaw:
     def __init__(self, threshold=10, strength=1.0, clearance=25, figures=FIGURES_RULE,
                  neutral=NEUTRAL_MAX, marks_apart=False, skip_nontext=False, lower_overhang=False,
                  robust_heights=False, guard_body=False, slant=False, figure_pairs=False,
-                 enclosure=False):
+                 enclosure=False, below_cut=False):
         self.letters = LawPart(0.45, 40, 3)
         self.low = LawPart(0.40, 0, 1)
         self.high = LawPart(0.48, 0, 1)
@@ -83,6 +83,8 @@ class KernLaw:
         self.figure_pairs = figure_pairs
         # знак не зажимается чернилами соседа сверху и снизу (`stop_enclosure`)
         self.enclosure = enclosure
+        # выносные ниже низа соседа кармана не образуют (`below_cut`)
+        self.below_cut = below_cut
 
     def part(self, kind):
         return (self.letters, self.low, self.high, self.middle)[kind]
@@ -354,6 +356,90 @@ def _cut_left(п, предел, наклоны):
     return s
 
 
+def _cut_below(ф, предел, справа, наклоны):
+    """Форма без строк ниже `предел` — у левого знака режется правый край
+    (`справа`), у правого — левый"""
+    if справа:
+        край = [x if i >= предел else -INF for i, x in enumerate(ф.R)]
+        if max(край) == -INF:
+            return ф
+    else:
+        край = [x if i >= предел else INF for i, x in enumerate(ф.L)]
+        if min(край) == INF:
+            return ф
+    s = KernShape()
+    s.advance = ф.advance
+    s.kind = ф.kind
+    if справа:
+        s.left, s.L, s.SL = ф.left, ф.L, ф.SL
+        s.right = max(край)
+        s.R = край
+        s.SR = [_f32_list(_shadow(край, наклон, ф.step, False)) for наклон in наклоны]
+    else:
+        s.right, s.R, s.SR = ф.right, ф.R, ф.SR
+        s.left = min(край)
+        s.L = край
+        s.SL = [_f32_list(_shadow(край, наклон, ф.step, True)) for наклон in наклоны]
+    s.rows = ф.rows
+    s.ink_low = max(ф.ink_low, предел)
+    s.ink_high = ф.ink_high
+    s.step = ф.step
+    s.lower = ф.lower
+    s.cuts = None
+    s.body_lo, s.body_hi = ф.body_lo, ф.body_hi
+    return s
+
+
+def below_cut(л, п, law):
+    """Формы для закона кармана без крючков под соседом (поправка окна, вне
+    исходного правила): у двух букв выносная одной, ушедшая ниже низа
+    другой (с запасом 5 % кегля) и в её сторону дальше тела своей буквы на
+    5 % кегля, кармана не образует. Крючок j уходит под соседа, и габарит
+    пары считался по нему: в nj, Pj, oj карман выходил шире, чем есть, и
+    закон стягивал пару на 20–76 тысячных, хотя у дизайнеров эти пары —
+    ноль, левое поле j уже отрицательное (Typedesigner на TypeDrawers,
+    24.10.2026; на девяти эталонах отход пар с j от дизайнера 24,8 → 4,6).
+    Хвосты g и y уходят влево не дальше 4 % — их пары как прежде: дизайнеры
+    кернят Tg как To, по верхней части. Сторож зазора — по настоящим краям"""
+    if not getattr(law, "below_cut", False) or л.body_hi is None or п.body_hi is None:
+        return л, п
+    вынос = OVERHANG_ROWS * л.step
+    if п.ink_low + OVERHANG_ROWS < л.ink_low:
+        предел = л.ink_low - OVERHANG_ROWS
+        тело = min(п.L[предел:])
+        под = min(п.L[:предел])
+        if тело != INF and под != INF and тело - под >= вынос:
+            if п.cuts is None:
+                п.cuts = {}
+            ключ = ("снизу", предел)
+            if ключ not in п.cuts:
+                п.cuts[ключ] = _cut_below(п, предел, False, law.slopes)
+            п = п.cuts[ключ]
+    elif л.ink_low + OVERHANG_ROWS < п.ink_low:
+        предел = п.ink_low - OVERHANG_ROWS
+        тело = max(л.R[предел:])
+        под = max(л.R[:предел])
+        if тело != -INF and под != -INF and под - тело >= вынос:
+            if л.cuts is None:
+                л.cuts = {}
+            ключ = ("снизу", предел)
+            if ключ not in л.cuts:
+                л.cuts[ключ] = _cut_below(л, предел, True, law.slopes)
+            л = л.cuts[ключ]
+    return л, п
+
+
+def needs_below_cut(л, п, law):
+    return bool(getattr(law, "below_cut", False)) and л.body_hi is not None and п.body_hi is not None \
+        and abs(л.ink_low - п.ink_low) > OVERHANG_ROWS
+
+
+def cut_pair(л, п, law):
+    """Обе формы для закона кармана со всеми срезами выступов"""
+    л, п = below_cut(л, п, law)
+    return overhang_cut(л, п, law), overhang_cut_right(л, п, law)
+
+
 def closest(правый_край, левый_край, от, до):
     """Ближайший просвет между правым краем левого знака и левым краем
     правого по строкам от…до — в одинарной точности, как в исходной программе"""
@@ -441,8 +527,7 @@ def kernel(л, п, часть, номер, пол, law, upm, обычный, з�
     """Ядро меры: (число, запас до зазора). `закон` — закон кармана, уже
     посчитанный по телу основы"""
     тысячная = float(upm) / 1000
-    k = закон if закон is not None else law_value(overhang_cut(л, п, law), overhang_cut_right(л, п, law),
-                                                 часть, номер, пол, upm)
+    k = закон if закон is not None else law_value(*cut_pair(л, п, law), часть, номер, пол, upm)
     if k is None:
         return (0, INT16_MAX)
     от, до = max(л.ink_low, п.ink_low), min(л.ink_high, п.ink_high)
@@ -776,6 +861,7 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
     # пропорциональные цифры кернятся и между собой (поправка окна, вне
     # исходного правила: там пары цифр не кернятся никогда — цифры считаются
     # табличными); табличные (одной ширины) — по-прежнему нет
+    снизу = bool(getattr(law, "below_cut", False))
     цифры_вместе = bool(getattr(law, "figure_pairs", False)) \
         and len({знаки[i].advance for i in range(n) if цифры[i]}) > 1
     for л in range(n):
@@ -811,12 +897,16 @@ def _pairs(знаки, цифры, тела, поправки, части, по�
                 else:
                     вид = род[знаки[а].kind][знаки[б].kind]
                     частьО, номерО = части[вид]
-                    k = law_value(overhang_cut(знаки[а], знаки[б], law),
-                                  overhang_cut_right(знаки[а], знаки[б], law), частьО, номерО,
-                                  полы[вид], upm)
+                    k = law_value(*cut_pair(знаки[а], знаки[б], law), частьО, номерО, полы[вид], upm)
                     законы_основ[ключ] = k
                 if k is not None:
                     k = k + поправки[л * 2] + поправки[п * 2 + 1]
+            if k is None and снизу and needs_below_cut(фл, знаки[п], law):
+                # выносные ниже низа соседа (`below_cut`) — общим путём
+                часть, номерЧ = части[вид_пары]
+                k = law_value(*cut_pair(фл, знаки[п], law), часть, номерЧ, полы[вид_пары], upm)
+                if k is None:
+                    continue
             if k is None:
                 # закон кармана (`law_value`)
                 доля, мёртвая, номер = законы[вид_пары]

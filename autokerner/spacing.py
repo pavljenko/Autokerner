@@ -62,13 +62,23 @@ class SpacingRule:
     выбившиеся знаки, ровный шрифт становится пёстрым.
 
     figures — пропорциональные цифры по норме своей группы (`figure_items`,
-    поправка окна): табличные не трогаются."""
+    поправка окна): табличные не трогаются.
+
+    per_side — порог решает за каждую сторону отдельно (поправка окна, вне
+    исходного правила): выбилась одна сторона — правится она, вторая стоит.
+    В исходном правиле знак, выбившийся одной стороной, ставится по правилу
+    целиком, и вторая сторона уходит от дизайнера на 3–8 единиц: в проверке
+    порчей стороны, испорченные на 5, после расчёта отличались на 7,9.
+    По умолчанию выключено: на 14 хорошо расставленных шрифтах скрипт с
+    этим ближе к дизайнеру (4,3 → 3,7 тысячных), но 50 неровных шрифтов
+    выравнивает хуже (ровность хуже у 21, лучше у 5; замер 25.10.2026)."""
 
     def __init__(self, depth=0.07, overshoot=0.0, threshold=12, word_gap=0.47,
                  word_gap_slack=0.25, word_gap_edge=False, soft=False, plateau=0.03, tail=0.07,
                  shelter_slope=1.0, shelter_weight=0.0, serif_weight=0.75, serif_depth=0.08,
                  serif_flat=0.01, robust_heights=False, slant=False, cursive=False,
-                 cursive_entry=0.04, cursive_body=0.6, even_density=False, figures=False):
+                 cursive_entry=0.04, cursive_body=0.6, even_density=False, figures=False,
+                 per_side=False):
         self.depth = depth
         self.overshoot = overshoot
         self.threshold = threshold
@@ -90,6 +100,7 @@ class SpacingRule:
         self.cursive_body = cursive_body
         self.even_density = even_density
         self.figures = figures
+        self.per_side = per_side
 
 
 class SpaceTarget:
@@ -741,7 +752,12 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
             сдвигЛ = в_пределе((эталоны_ровно[з.группа] - з.белоеСлева) / з.высотаСлева, з.группа)
             сдвигП = в_пределе((эталоны_ровно[з.группаСправа] - з.белоеСправа) / з.высотаСправа,
                                з.группаСправа)
-            if max(abs(irnd(float(з.lsb) + сдвигЛ) - з.lsb), abs(irnd(float(з.rsb) + сдвигП) - з.rsb)) < порог:
+            правЛ = abs(irnd(float(з.lsb) + сдвигЛ) - з.lsb)
+            правП = abs(irnd(float(з.rsb) + сдвигП) - з.rsb)
+            if rule.per_side:
+                сдвигЛ = сдвигЛ if правЛ >= порог else 0.0
+                сдвигП = сдвигП if правП >= порог else 0.0
+            elif max(правЛ, правП) < порог:
                 сдвигЛ = сдвигП = 0.0
             плотЛ = irnd((цельЛ - эталоны_ровно[з.группа]) / з.высотаСлева)
             плотП = irnd((цельП - эталоны_ровно[з.группаСправа]) / з.высотаСправа)
@@ -752,6 +768,9 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
             сдвигП = в_пределе((цельП - з.белоеСправа) / з.высотаСправа, з.группаСправа)
             новыйL = irnd(float(з.lsb) + сдвигЛ)
             новыйR = irnd(float(з.rsb) + сдвигП)
+            if rule.per_side and max(abs(новыйL - з.lsb), abs(новыйR - з.rsb)) >= порог:
+                новыйL = новыйL if abs(новыйL - з.lsb) >= порог else з.lsb
+                новыйR = новыйR if abs(новыйR - з.rsb) >= порог else з.rsb
         if з.имя in fixed:
             новыйL, новыйR = з.lsb, з.rsb
             плотЛ = плотП = 0
@@ -1145,7 +1164,10 @@ def figure_items(master, rule, эталоны, эталоны_ровно, зам
         if общая:
             новыйL = irnd(float(lsb) + в_пределе(на_ряд_ровно - л / в, г))
             новыйR = irnd(float(rsb) + в_пределе(на_ряд_ровно - п / в, г))
-            if max(abs(новыйL - lsb), abs(новыйR - rsb)) < порог:
+            if rule.per_side:
+                новыйL = новыйL if abs(новыйL - lsb) >= порог else lsb
+                новыйR = новыйR if abs(новыйR - rsb) >= порог else rsb
+            elif max(abs(новыйL - lsb), abs(новыйR - rsb)) < порог:
                 новыйL, новыйR = lsb, rsb
             плотЛ = плотП = irnd(на_ряд - на_ряд_ровно)
             новыйL += плотЛ
@@ -1153,6 +1175,9 @@ def figure_items(master, rule, эталоны, эталоны_ровно, зам
         else:
             новыйL = irnd(float(lsb) + в_пределе(на_ряд - л / в, г))
             новыйR = irnd(float(rsb) + в_пределе(на_ряд - п / в, г))
+            if rule.per_side and max(abs(новыйL - lsb), abs(новыйR - rsb)) >= порог:
+                новыйL = новыйL if abs(новыйL - lsb) >= порог else lsb
+                новыйR = новыйR if abs(новыйR - rsb) >= порог else rsb
         чернила = знак.advance - lsb - rsb
         вышло.append(SpacingItem(знак.name, к, OTHER, знак.advance, lsb, rsb, л, п,
                                  новыйL, новыйR, новыйL + чернила + новыйR,
