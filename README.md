@@ -41,7 +41,10 @@ seen the result and pressed **Apply**, and the last write can be reverted.
   letters by eye (say n and o, or H and O), the rest follow them. Otherwise
   the colour is guessed from the letter shapes: the counter of H, four key
   letters, and all letters with the weight and width of the set. You can also
-  set it as a number (Fine-tuning → From zero: H side).
+  set it as a number (Fine-tuning → From zero: H side). Punctuation and
+  symbols (+ = < > © ° ½ and so on) are placed by norms taken from
+  well-spaced fonts; box-drawing characters, the fraction slash and
+  standalone accents are left alone.
 - **Kerning.** For every pair the script measures the "pocket": how much wider
   the closest gap between the two outlines (including the shadow of
   overhangs) is than the gap between their bounding boxes. A share of the

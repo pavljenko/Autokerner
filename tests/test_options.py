@@ -627,6 +627,34 @@ class FromZeroTest(unittest.TestCase):
         план = auto.run([м], options=Options(kerning=False)).plans[0]
         self.assertEqual((план.side_source, план.side_letters), ("guess", ()))
 
+    def test_symbols_from_zero(self):
+        """с нуля символы встают по нормам (+ — своя, ≡ — общая), псевдографика стоит; у
+        расставленного шрифта символы не трогаются"""
+        from autokerner.model import Glyph, Master
+        from tests.synthetic import прямоугольник
+
+        def с_символами(м, поле):
+            знаки = list(м.glyphs) + [
+                Glyph("plus", [0x2B], 300 + 2 * поле, [прямоугольник(поле, 220, поле + 300, 280),
+                                                      прямоугольник(поле + 120, 100, поле + 180, 400)]),
+                Glyph("uni2261", [0x2261], 300 + 2 * поле, [прямоугольник(поле, 150 + 100 * k, поле + 300, 190 + 100 * k)
+                                                           for k in range(3)]),
+                Glyph("uni2500", [0x2500], 600, [прямоугольник(0, 230, 600, 270)])]
+            return Master(м.upm, знаки, x_height=м.x_height, cap_height=м.cap_height, label=м.label, weight=м.weight)
+
+        план = auto.run([с_символами(без_расстановки(0), 0)], options=Options(kerning=False)).plans[0]
+        self.assertTrue(план.from_zero)
+        for имя in ("plus", "uni2261"):
+            з = план.item(имя)
+            self.assertGreater(з.target_lsb, 0, имя)
+            self.assertGreater(з.target_rsb, 0, имя)
+        з = план.item("uni2500")
+        self.assertTrue(з is None or (з.target_lsb, з.target_rsb) == (0, 0))
+        итог = auto.run([с_символами(мастер(), 40)], options=Options(kerning=False))
+        self.assertFalse(итог.plans[0].from_zero)
+        self.assertNotIn("plus", итог.spacing)
+        self.assertNotIn("uni2261", итог.spacing)
+
     def test_off_and_classic_keep_rule(self):
         for o in (Options(kerning=False, spacing_from_zero=False), Options.classic(kerning=False)):
             self.assertFalse(auto.run([без_расстановки(0)], options=o).plans[0].from_zero)

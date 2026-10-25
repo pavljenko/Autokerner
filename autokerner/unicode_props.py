@@ -164,6 +164,15 @@ def is_uppercase(code):
     return ch.isupper() or (ch.upper() == ch and _cased(ch))
 
 
+def is_sign(code):
+    """Символ, знак препинания или число вне цифр (¹ ½ №…)"""
+    ch = _char(code)
+    if ch is None:
+        return False
+    cat = unicodedata.category(ch)
+    return cat[0] in "SP" or cat == "No"
+
+
 def is_number(code):
     ch = _char(code)
     if ch is None:
