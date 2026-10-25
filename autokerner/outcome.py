@@ -15,6 +15,29 @@ SELECTED = "selected"    # заменить пары с выделенными �
 DEFAULT_TEXT = "AVATAR Type, Tokyo LTV «Ау» Wavy ТАУ ГОРА Учёт: Тётя «Гугл» 7,4 rv."
 
 
+def kept_glyphs(master, marked):
+    """Знаки, чей кернинг не трогается: помеченные цветом и те, что идут за
+    помеченной базой, — буква с диакритикой по Юникоду (Á за A) и составной
+    знак, чей первый компонент помечен. Так принято кернить диакритику —
+    одним классом с базой; поля её и так едут за базой"""
+    from .unicode_props import base_code
+    помечены = set(marked)
+    вышло = set(помечены)
+    if not помечены:
+        return вышло
+    по_коду = {код: master.name(i) for код, i in master.cmap.items()}
+    for i, знак in enumerate(master.glyphs):
+        if знак.name in вышло:
+            continue
+        if any(по_коду.get(base_code(код)) in помечены for код in знак.codes):
+            вышло.add(знак.name)
+            continue
+        базы = master.component_bases(i)
+        if базы and master.name(базы[0]) in помечены:
+            вышло.add(знак.name)
+    return вышло
+
+
 def write_mode(options, old, only=None):
     """Как пишется кернинг: `WHOLE`, `MISSING` или `SELECTED`.
 

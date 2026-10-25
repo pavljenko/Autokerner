@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from autokerner import auto, export, outcome, report  # noqa: E402
+from autokerner import auto, export, kerning, outcome, report  # noqa: E402
 from autokerner.fontlab_bridge import OldKerning  # noqa: E402
 from autokerner.geometry import contours_rect  # noqa: E402
 from autokerner.model import Glyph, Master  # noqa: E402
@@ -79,6 +79,73 @@ class WriteModeTest(unittest.TestCase):
         self.assertGreaterEqual(abs(крупные[0][3]), abs(крупные[-1][3]))
         с_t = outcome.changed_pairs(имена, ПУСТО.value, после, glyph="T")
         self.assertTrue(all("T" in (л, п) for л, п, _, _ in с_t))
+
+
+class KeptKerningTest(unittest.TestCase):
+    """Знаки с цветной меткой: их пары остаются как в шрифте, в любом режиме записи"""
+
+    def setUp(self):
+        self.план = auto.run(мастера()).kern
+        self.имена = [g.name for g in мастера()[0].glyphs]
+        self.коды = {g.name: bool(g.codes) for g in мастера()[0].glyphs}
+        классы = {"L_T": (["T"], "KernLeft"), "R_o": (["o", "O"], "KernRight")}
+        # класс T|o, нулевое исключение T|O поверх него, пара знаков H|T; на мастерах числа разные
+        self.свой = [OldKerning([("L_T", True, "R_o", True, -80.0), ("T", False, "O", False, 0.0),
+                                 ("H", False, "T", False, -15.0)], классы),
+                     OldKerning([("L_T", True, "R_o", True, -90.0), ("T", False, "O", False, 0.0),
+                                 ("H", False, "T", False, -20.0)], классы)]
+        self.сохр = kerning.keep_pairs(self.план, {"T"}, self.имена, self.свой)
+
+    def test_pairs_with_kept_glyph_stay_old(self):
+        for w in range(2):
+            for n in self.имена:
+                self.assertEqual(self.сохр.value("T", n, w), self.свой[w].value("T", n), ("T", n, w))
+                self.assertEqual(self.сохр.value(n, "T", w), self.свой[w].value(n, "T"), (n, "T", w))
+        self.assertEqual(self.сохр.kept_pairs, 2)   # T|o и H|T; T|O — ноль, его и так даёт пустота
+        self.assertNotIn("T", self.сохр.left_class)
+        self.assertNotIn("T", self.сохр.right_class)
+        self.assertFalse(any("T" in знаки for знаки in self.сохр.left_members.values()))
+
+    def test_other_pairs_as_calculated(self):
+        for w in range(2):
+            for л in self.имена:
+                for п in self.имена:
+                    if "T" not in (л, п):
+                        self.assertEqual(self.сохр.value(л, п, w), self.план.value(л, п, w), (л, п, w))
+
+    def test_every_write_mode_keeps_them(self):
+        for w in range(2):
+            целиком = outcome.kern_after(self.сохр, self.свой[w], w, outcome.WHOLE)
+            self.assertEqual(целиком("T", "o"), self.свой[w].value("T", "o"))
+            self.assertEqual(целиком("H", "T"), self.свой[w].value("H", "T"))
+        дописать, _ = outcome.pair_writes(self.сохр, self.имена, self.коды, self.свой, outcome.MISSING)
+        заменить, _ = outcome.pair_writes(self.сохр, self.имена, self.коды, self.свой, outcome.SELECTED,
+                                          only={"T", "H", "o"})
+        for пары in (дописать, заменить):
+            self.assertFalse([к for к in пары if "T" in к.split("|")])
+        self.assertTrue(заменить)   # прочие пары выделенных пишутся
+        после = outcome.kern_after(self.сохр, self.свой[0], 0, outcome.SELECTED, only={"T", "H", "o"},
+                                   writes=заменить)
+        self.assertEqual(после("T", "o"), -80.0)
+
+    def test_emptied_class_goes_with_its_cells(self):
+        план = kerning.KernPlanVariable([300.0, 700.0], {"T": 0, "F": 1}, {"o": 0},
+                                        {0 << 16 | 0: [-50, -60], 1 << 16 | 0: [-30, -35]},
+                                        {"T|a": [-10, -12]}, 1, 0, {0: ["T"], 1: ["F"]}, {0: ["o"]})
+        сохр = kerning.keep_pairs(план, {"T"}, ["T", "F", "o", "a"], [ПУСТО, ПУСТО])
+        self.assertEqual(сохр.left_members, {1: ["F"]})
+        self.assertEqual(list(сохр.cells), [1 << 16 | 0])
+        self.assertEqual(сохр.value("T", "o", 0), 0)
+        self.assertEqual(сохр.value("F", "o", 1), -35)
+        kerning.class_names(сохр)   # без номера без имени
+
+    def test_kept_glyphs_follow_base(self):
+        def знак(имя, коды, базы=()):
+            return Glyph(имя, коды, 600, [прямоугольник(50, 0, 550, 700)], базы)
+        m = Master(1000, [знак("A", [0x41]), знак("Aacute", [0xC1]), знак("A.alt", [], ["A"]),
+                          знак("B", [0x42]), знак("Bdot", [0x1E02], ["B"])], 500, 700)
+        self.assertEqual(outcome.kept_glyphs(m, {"A"}), {"A", "Aacute", "A.alt"})
+        self.assertEqual(outcome.kept_glyphs(m, set()), set())
 
 
 class NbspTest(unittest.TestCase):

@@ -157,8 +157,11 @@ needed.
      existing kerning or **add to it** (your pairs and classes stay; only
      missing pairs are added, as glyph pairs).
    - **Which glyphs**: all, or only the glyphs selected in the font window.
-     Glyphs with FontLab metrics formulas (`=H`) and glyphs with a color mark
-     can be left untouched. The no-break space can follow the word space.
+     Glyphs with FontLab metrics formulas (`=H`) can keep their sidebearings.
+     Glyphs with a color mark (Glyph → Flag) can be left untouched: their
+     sidebearings and their kerning stay as they were, and so does the kerning
+     of accented letters built on them. The no-break space can follow the word
+     space.
    - **Masters** (multi-master fonts): which masters to calculate and write.
    - **Rule**: a preset (Text, Display, Light kerning) and, folded, the
      settings behind it: looseness, sensitivity, word space and how far a too

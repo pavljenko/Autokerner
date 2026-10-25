@@ -26,8 +26,9 @@ from .fontlab_bridge import FontSource, OldKerning
 from .geometry import contours_rect, irnd
 from .options import (ALL, FIGURES, MERGE, PRESET_NOTES, PRESET_TITLES, PRESETS, REPLACE, SELECTED, Options,
                       preset)
-from .outcome import (DEFAULT_TEXT, MISSING, WHOLE, changed_pairs, kern_after, layout, pair_writes,
-                      parse_text, size_estimate, spacing_after, write_mode)
+from .kerning import keep_pairs
+from .outcome import (DEFAULT_TEXT, MISSING, WHOLE, changed_pairs, kept_glyphs, kern_after, layout,
+                      pair_writes, parse_text, size_estimate, spacing_after, write_mode)
 from .outcome import SELECTED as SELECTED_PAIRS
 from .report import build
 
@@ -77,8 +78,14 @@ _TEXT = {
                          "Glyphs whose sidebearing or width is a FontLab formula (=H, =n+10): "
                          "a change would override it."),
     "keep_marked": ("Не трогать знаки с цветной меткой", "Keep glyphs with a color mark"),
-    "keep_marked_tip": ("Пометьте цветом знаки, поля которых выверены рукой, — расчёт их не тронет.",
-                        "Mark hand-tuned glyphs with a color — the calculation leaves them alone."),
+    "keep_marked_tip": ("Пометьте цветом (Glyph → Flag) знаки, выверенные рукой, — расчёт не тронет ни их "
+                        "поля, ни кернинг: пары с ними останутся как были, и у букв с диакритикой на их "
+                        "основе тоже. Если соседи получат новые поля, числа этих пар прежние, а зазор может "
+                        "стать другим.",
+                        "Flag hand-tuned glyphs with a color (Glyph → Flag) — the calculation leaves both their "
+                        "sidebearings and their kerning alone: pairs with them stay as they were, and so do "
+                        "those of accented letters built on them. If a neighbour gets new sidebearings, these "
+                        "pairs keep their numbers but the gap may look different."),
     "nbsp": ("Неразрывный пробел — шириной как пробел", "No-break space as wide as the space"),
     "nbsp_tip": ("Разная ширина пробела и неразрывного пробела — частая ошибка (её ловит FontBakery).",
                  "Different widths of space and no-break space are a common error (FontBakery checks it)."),
@@ -241,6 +248,8 @@ _TEXT = {
     "protected": ("Поля не трогаются у %s.", "Sidebearings are kept for %s."),
     "pr_formula": ("%d с формулами метрик", "%d with metrics formulas"),
     "pr_mark": ("%d с меткой", "%d with a mark"),
+    "kept_kern": ("Кернинг не тронут у %s знаков с меткой и их диакритики: прежних пар сохранено %s.",
+                  "Kerning is kept for %s glyphs with a mark and their accented forms: %s old pairs kept."),
     "pr_selection": ("%d не выделенных", "%d not selected"),
     "pr_rejected": ("%d снятых вами", "%d you unticked"),
     "truncated": ("В предел не влезло пар знаков: %s (самые слабые). Предел — в «Тонкой настройке».",
@@ -531,6 +540,8 @@ def report_html(report, info):
         ("rejected", "pr_rejected")) if pr.get(причина)]
     if части:
         заметки.append(_e(t("protected") % ", ".join(части)))
+    if info.get("kept"):
+        заметки.append(_e(t("kept_kern") % (_n(info["kept"][0]), _n(info["kept"][1]))))
     if info.get("truncated"):
         заметки.append(_e(t("truncated") % _n(info["truncated"])))
     if info.get("kern_feature"):
@@ -1586,6 +1597,10 @@ class Window:
             итог = run(мастера, options=o, fixed=fixed, progress=self._progress)
             self._progress(t("progress"))
             old = [OldKerning(*self.source.kerning_now(m)) for m in names]
+            # кернинг знаков с меткой (и их диакритики) остаётся прежним
+            свои = kept_glyphs(мастера[0], self.source.marked_names()) if o.keep_marked else set()
+            if свои and итог.kern is not None:
+                итог.kern = keep_pairs(итог.kern, свои, [g.name for g in мастера[0].glyphs], old)
             only = set(выбраны) if выбраны else None
             вид = write_mode(o, old, only) if итог.kern is not None else None
             writes = None
@@ -1607,6 +1622,7 @@ class Window:
             причины["rejected"] = len(self.rejected_glyphs - set(защищены))
             self.info = {
                 "spacing": o.spacing, "space": o.space, "mode": вид, "protected": причины,
+                "kept": (len(свои), итог.kern.kept_pairs) if свои and итог.kern is not None else None,
                 "writes": len(writes[0]) if writes else 0,
                 "truncated": writes[1] if writes else (итог.kern.truncated if итог.kern else 0),
                 "size": size_estimate(итог.kern, вид, writes[0] if writes else None) if итог.kern else 0,

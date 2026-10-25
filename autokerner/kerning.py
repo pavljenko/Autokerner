@@ -1447,6 +1447,7 @@ class KernPlanVariable:
         self.truncated = truncated
         self.left_members = left_members or {}
         self.right_members = right_members or {}
+        self.kept_pairs = 0   # пар знаков с меткой, оставленных прежними (`keep_pairs`)
 
     def value(self, left, right, w):
         своё = self.pairs.get(left + "|" + right)
@@ -1597,8 +1598,50 @@ def with_overrides(plan, overrides):
         return plan
     пары = dict(plan.pairs)
     пары.update(overrides)
-    return KernPlanVariable(plan.weights, plan.left_class, plan.right_class, plan.cells, пары,
-                            plan.precision, plan.truncated, plan.left_members, plan.right_members)
+    вышло = KernPlanVariable(plan.weights, plan.left_class, plan.right_class, plan.cells, пары,
+                             plan.precision, plan.truncated, plan.left_members, plan.right_members)
+    вышло.kept_pairs = plan.kept_pairs
+    return вышло
+
+
+def keep_pairs(plan, kept, names, old):
+    """План, в котором кернинг знаков `kept` остаётся как в шрифте: они
+    выходят из классов (опустевший класс уходит вместе со своими ячейками),
+    их пары расчёта снимаются, а прежние числа ставятся парами знаков там,
+    где хоть на одном мастере не ноль, — знак вне классов и пар и так даёт
+    ноль. `names` — все знаки шрифта, `old` — прежний кернинг по мастерам
+    (объекты с `value`). Расчёт для остальных не меняется: знаки `kept` в
+    нём участвуют (в опорных парах HO, no — тоже). Эти пары обязательны,
+    предел пар их не режет; сколько их — `kept_pairs` ответа"""
+    kept = set(kept)
+    if not kept:
+        return plan
+    W = len(plan.weights)
+
+    def без(состав, классы):
+        члены = {н: [з for з in знаки if з not in kept] for н, знаки in состав.items()}
+        члены = {н: з for н, з in члены.items() if з}
+        return члены, {з: н for з, н in классы.items() if з not in kept and н in члены}
+
+    левые, по_левым = без(plan.left_members, plan.left_class)
+    правые, по_правым = без(plan.right_members, plan.right_class)
+    ячейки = {к: ч for к, ч in plan.cells.items() if к >> 16 in левые and к & 0xFFFF in правые}
+    пары = {к: ч for к, ч in plan.pairs.items() if not kept.intersection(к.split("|"))}
+    прежние = {}
+    for знак in sorted(kept):
+        for сосед in names:
+            for л, п in ((знак, сосед), (сосед, знак)):
+                ключ = л + "|" + п
+                if ключ in прежние:
+                    continue
+                числа = [old[w].value(л, п) for w in range(W)]
+                if any(числа):
+                    прежние[ключ] = числа
+    пары.update(прежние)
+    вышло = KernPlanVariable(plan.weights, по_левым, по_правым, ячейки, пары, plan.precision,
+                             plan.truncated, левые, правые)
+    вышло.kept_pairs = len(прежние)
+    return вышло
 
 
 def estimate_size(plan):

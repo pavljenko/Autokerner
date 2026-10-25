@@ -229,7 +229,9 @@ class FontSource:
             return None
 
     def marked_names(self):
-        """Знаки с цветной меткой (`flGlyph.mark` не ноль)"""
+        """Знаки с цветной меткой (`flGlyph.mark` не ноль). В FontLab 8.4.3
+        метка — оттенок флага плюс один (Glyph → Flag: Red 1, Green 121,
+        Cyan 181, Blue 241, Magenta 301; без флага 0, замер 25.10.2026)"""
         return [g.name for g in self.font.glyphs if self._flglyph(g.name).mark]
 
     def metric_key_names(self, masters=None):
@@ -301,7 +303,8 @@ class FontSource:
 
     def fingerprint(self, masters=None):
         """Слепок шрифта для проверки «не правили ли после расчёта»: имена
-        знаков, ширины на мастерах, число пар кернинга"""
+        знаков, ширины на мастерах, число пар кернинга и знаки с цветной
+        меткой (пометил после расчёта — защита ещё не учтена)"""
         имена, ширины = [], []
         for g in self.font.glyphs:
             имена.append(g.name)
@@ -309,7 +312,7 @@ class FontSource:
                 слой = self.layer(g.name, m)
                 ширины.append(слой.advanceWidth if слой is not None else None)
         пары = [len(self.package.kerning(m).keys()) for m in masters or self.master_names]
-        return (tuple(имена), tuple(ширины), tuple(пары))
+        return (tuple(имена), tuple(ширины), tuple(пары), tuple(sorted(self.marked_names())))
 
     def kerning_now(self, master):
         """Кернинг мастера как есть: (пары, классы).
