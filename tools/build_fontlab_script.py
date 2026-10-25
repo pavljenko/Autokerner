@@ -14,7 +14,7 @@ import sys
 КОРЕНЬ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 ПАКЕТ = os.path.join(КОРЕНЬ, "autokerner")
 # fontTools в FontLab нет: чтение файлов (otf.py) нужно только проверкам вне него
-МОДУЛИ = ["__init__", "unicode_props", "geometry", "model", "spacing", "kerning", "options", "auto",
+МОДУЛИ = ["__init__", "unicode_props", "geometry", "model", "zero_model", "zero", "spacing", "kerning", "options", "auto",
           "report", "outcome", "export", "fontlab_bridge", "fontlab_ui"]
 
 ШАПКА = '''#FLM: Autokerner

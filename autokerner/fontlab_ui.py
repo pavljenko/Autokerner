@@ -90,10 +90,10 @@ _TEXT = {
     "fine": ("Тонкая настройка", "Fine-tuning"),
     "sub_spacing": ("Апроши", "Spacing"),
     "looseness": ("Разрядка", "Looseness"),
-    "looseness_tip": ("Плотнее (−) или свободнее (+) всё вместе, от плотности по умолчанию: она на 10 % плотнее "
-                      "исходного правила, +11 % возвращает исходную. Все знаки группы сдвигаются одинаково.",
-                      "Tighter (−) or looser (+) overall, counted from the default colour, which is 10% denser than "
-                      "the plain rule; +11% brings the plain rule back. All glyphs of a group move alike."),
+    "looseness_tip": ("Плотнее (−) или свободнее (+) всё вместе: эталон белого умножается на 1 + доля. "
+                      "0 — своя плотность шрифта. Все знаки группы сдвигаются одинаково.",
+                      "Tighter (−) or looser (+) overall: the white-area target is scaled by 1 + share. "
+                      "0 keeps the font's own colour. All glyphs of a group move alike."),
     "threshold": ("Чувствительность", "Sensitivity"),
     "threshold_tip": ("Знак правится, если поле уходит от правила больше чем на столько тысячных кегля. "
                       "Меньше — правок больше.",
@@ -160,6 +160,37 @@ _TEXT = {
                     "would be side by side — the figure + mark pair is loosened for that (the comma stays with the "
                     "figure on its left: “1917,”). “No kerning” leaves these pairs unkerned."),
     "per_mille": (" /1000", " /1000"),
+    "side_h": ("С нуля: поле H", "From zero: H side"),
+    "side_h_tip": ("Если у шрифта нет своей расстановки (поля нулевые или у всех букв одинаковые), скрипт "
+                   "расставляет его с нуля. Плотность он берёт с букв-образцов, если вы расставили на глаз "
+                   "некоторые из n o h u m i l H O I N U (или п о н и Н О П И): остальные встанут по ним "
+                   "(образцы выровняются вместе со всеми). Иначе плотность угадывается по форме букв. Здесь её "
+                   "можно задать числом: среднее белое у стороны H, тысячных кегля; «авто» — не задавать. "
+                   "У расставленного шрифта это поле ни на что не влияет.",
+                   "If the font has no spacing of its own (zero sidebearings, or the same ones on every letter), "
+                   "the script spaces it from scratch. It takes the colour from sample letters if you have "
+                   "spaced some of n o h u m i l H O I N U by eye: the rest follow them (the samples are "
+                   "evened out along with the others). Otherwise the colour is guessed from the letter shapes. "
+                   "Here you can set it as "
+                   "a number: the average white beside H, in thousandths of the em; “auto” leaves it unset. "
+                   "For a spaced font this field does nothing."),
+    "auto": ("авто", "auto"),
+    "from_zero_on": ("Расставлять с нуля шрифт без своей расстановки", "Space a font with no spacing from scratch"),
+    "from_zero_on_tip": ("Шрифт без своей расстановки — поля нулевые или у почти всех букв одинаковые. "
+                         "Моноширинные и пиксельные шрифты не трогаются. Снимите галочку, если одинаковые "
+                         "поля у вас задуманы.",
+                         "A font with no spacing: zero sidebearings, or the same ones on nearly every letter. "
+                         "Monospaced and pixel fonts are left alone. Untick if your equal sidebearings are on purpose."),
+    "from_zero": ("Своей расстановки у шрифта нет — поля поставлены с нуля. Белое у стороны H: %s "
+                  "тысячных кегля (%s). Плотнее или свободнее — в тонкой настройке: «С нуля: поле H» "
+                  "или «Разрядка».",
+                  "The font has no spacing of its own, so it was spaced from scratch. White beside H: %s "
+                  "thousandths of the em (%s). Tighter or looser: Fine-tuning → “From zero: H side” or "
+                  "“Looseness”."),
+    "side_guessed": ("угадано по форме; точнее — если расставить на глаз n и o и запустить снова",
+                     "guessed from the shapes; for more accuracy, space n and o by eye and run again"),
+    "side_set": ("задано числом", "set as a number"),
+    "side_hand": ("по буквам, расставленным вручную: %s", "from the letters spaced by hand: %s"),
     "reset": ("Сбросить настройки", "Reset settings"),
     # ── справа ──
     "tab_settings": ("Настройки", "Settings"),
@@ -483,6 +514,14 @@ def report_html(report, info):
             к.replace("<td ", "<td width='33%' ", 1) for к in карточки))
 
     заметки = []
+    if info.get("from_zero"):
+        поля = " · ".join(("%s %s" % (имя, _n(round(поле)) if поле is not None else "—")
+                           if len(info["from_zero"]) > 1 else (_n(round(поле)) if поле is not None else "—"))
+                          for имя, поле, _откуда, _буквы in info["from_zero"])
+        _имя, _поле, откуда, буквы = info["from_zero"][0]
+        заметки.append(_e(t("from_zero") % (поля, t("side_set") if откуда == "set" else
+                                             t("side_hand") % " ".join(буквы) if откуда == "hand" else
+                                             t("side_guessed"))))
     if info.get("collisions"):
         примеры, всего = info["collisions"]
         заметки.append(_e(t("collisions") % (" · ".join(примеры), всего)))
@@ -950,11 +989,15 @@ class Window:
         self.sp_threshold = self._spin(2, 60, t("per_mille"), t("threshold_tip"))
         self.sp_word_gap = self._spin(25, 80, " %", t("word_gap_tip"))
         self.co_space_fit = self._combo(t("space_fit_items").split("|"), t("space_fit_tip"))
+        self.sp_side_h = self._spin(0, 300, t("per_mille"), t("side_h_tip"), t("auto"))
+        self.cb_from_zero = self._check(t("from_zero_on"), t("from_zero_on_tip"))
         ф.addRow(t("looseness"), self.sp_looseness)
         ф.addRow(t("threshold"), self.sp_threshold)
         ф.addRow(t("word_gap"), self.sp_word_gap)
         ф.addRow(t("space_fit"), self.co_space_fit)
+        ф.addRow(t("side_h"), self.sp_side_h)
         тонко.addLayout(ф)
+        тонко.addWidget(self.cb_from_zero)
         тонко.addWidget(self._subtitle(t("sub_kerning")))
         ф = QtGui.QFormLayout()
         self.sp_strength = self._spin(30, 200, " %", t("strength_tip"))
@@ -1105,6 +1148,8 @@ class Window:
             self.sp_threshold.setValue(int(o.spacing_threshold))
             self.sp_word_gap.setValue(int(o.word_gap))
             self.co_space_fit.setCurrentIndex(0 if o.space_edge else 1)
+            self.sp_side_h.setValue(int(o.spacing_side_h or 0))
+            self.cb_from_zero.setChecked(bool(o.spacing_from_zero))
             self.sp_strength.setValue(int(o.kern_strength))
             self.sp_kthreshold.setValue(int(o.kern_threshold))
             self.sp_clearance.setValue(int(o.kern_clearance))
@@ -1141,6 +1186,8 @@ class Window:
         o.spacing_threshold = self.sp_threshold.value
         o.word_gap = self.sp_word_gap.value
         o.space_edge = self.co_space_fit.currentIndex != 1
+        o.spacing_side_h = self.sp_side_h.value
+        o.spacing_from_zero = self.cb_from_zero.isChecked()
         o.kern_strength = self.sp_strength.value
         o.kern_threshold = self.sp_kthreshold.value
         o.kern_clearance = self.sp_clearance.value
@@ -1167,7 +1214,7 @@ class Window:
         self.mode_box.setEnabled(кернинг)
         self.mode_note.setText(t("mode_merge_note") if self.rb_merge.isChecked() else t("mode_replace_note"))
         self.cb_nbsp.setEnabled(пробел)
-        for поле in (self.sp_looseness, self.sp_threshold):
+        for поле in (self.sp_looseness, self.sp_threshold, self.sp_side_h, self.cb_from_zero):
             поле.setEnabled(апроши)
         self.sp_word_gap.setEnabled(пробел)
         self.co_space_fit.setEnabled(пробел)
@@ -1567,6 +1614,9 @@ class Window:
                 "subset": (len(names), len(self.source.master_names))
                 if len(names) < len(self.source.master_names) else None,
                 "collisions": self._collisions(итог, мастера[0]),
+                "from_zero": [(names[k], план.side_h, план.side_source, план.side_letters)
+                              for k, план in enumerate(итог.plans or [])
+                              if getattr(план, "from_zero", False) and k < len(names)],
             }
             self.report = build(мастера, итог, old, after=self._after)
             self._show_summary()

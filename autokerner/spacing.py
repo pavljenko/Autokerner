@@ -8,6 +8,7 @@
 диакритикой ставится по своей основе; составной едет вместе с базой.
 """
 
+import copy
 import math
 
 from .geometry import INF, deskewed, ink_profile, irnd, median, rnd, slant_of
@@ -71,14 +72,22 @@ class SpacingRule:
     порчей стороны, испорченные на 5, после расчёта отличались на 7,9.
     По умолчанию выключено: на 14 хорошо расставленных шрифтах скрипт с
     этим ближе к дизайнеру (4,3 → 3,7 тысячных), но 50 неровных шрифтов
-    выравнивает хуже (ровность хуже у 21, лучше у 5; замер 25.10.2026)."""
+    выравнивает хуже (ровность хуже у 21, лучше у 5; замер 25.10.2026).
+
+    from_zero — расстановка с нуля (`zero`, поправка окна): "auto" — если у
+    шрифта нет своей расстановки (`zero.unspaced`: поля нулевые или у всех
+    букв одинаковые), True — всегда, False — никогда. Тогда эталон белого
+    берётся не из полей шрифта (`_zero_targets`): с букв, которые дизайнер
+    расставил сам (`zero.hand_spaced`), иначе угадывается по форме
+    (`zero.guess`); side_h — плотность числом, среднее белое у стороны H,
+    тысячные кегля (0 — не задана); предел сдвига снят, порог почти нулевой."""
 
     def __init__(self, depth=0.07, overshoot=0.0, threshold=12, word_gap=0.47,
                  word_gap_slack=0.25, word_gap_edge=False, soft=False, plateau=0.03, tail=0.07,
                  shelter_slope=1.0, shelter_weight=0.0, serif_weight=0.75, serif_depth=0.08,
                  serif_flat=0.01, robust_heights=False, slant=False, cursive=False,
                  cursive_entry=0.04, cursive_body=0.6, even_density=False, figures=False,
-                 per_side=False):
+                 per_side=False, from_zero=False, side_h=0.0):
         self.depth = depth
         self.overshoot = overshoot
         self.threshold = threshold
@@ -101,6 +110,8 @@ class SpacingRule:
         self.even_density = even_density
         self.figures = figures
         self.per_side = per_side
+        self.from_zero = from_zero
+        self.side_h = side_h
 
 
 class SpaceTarget:
@@ -172,6 +183,10 @@ class SpacingPlan:
         self.profiles = profiles
         self.zone_height = zone_height
         self.space = space
+        self.from_zero = False   # расставлено с нуля (`SpacingRule.from_zero`)
+        self.side_h = None       # белое у стороны H, тысячные кегля, если с нуля
+        self.side_source = None  # откуда плотность с нуля: "set" — число, "hand" — буквы, "guess" — форма
+        self.side_letters = ()   # буквы, расставленные дизайнером, если плотность с них
 
     @property
     def threshold_units(self):
@@ -602,6 +617,13 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     не трогает: цель у них — нынешние поля, и их основа для диакритики,
     составных и знаков препинания тоже стоит на месте"""
     rule = rule or SpacingRule()
+    from . import zero
+    с_нуля = rule.from_zero is True or (rule.from_zero == "auto" and zero.unspaced(master))
+    своё_правило = rule
+    if с_нуля:
+        # своей расстановки нет: правится каждый знак, как бы мало он ни ушёл
+        rule = copy.copy(rule)
+        rule.threshold = 0.5
     upm, капитель, рост = heights(master, rule.robust_heights)
     капитель = max(капитель, рост + 1)
     шаг = upm / 256
@@ -708,6 +730,15 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     elif UPPER in эталоны:
         доля = ростКапители / капитель
         эталоны[SMALLCAP] = эталоны[UPPER] * доля * доля
+    с_нуля_вышло = None
+    if с_нуля:
+        с_нуля_вышло = _zero_targets(master, замеры, профили, rule.side_h * upm / 1000.0, рост, капитель,
+                                     рукописный)
+        if с_нуля_вышло is None:
+            # плотность не задать (нет ни букв-образцов, ни форм для угадывания): правило как есть
+            с_нуля, rule = False, своё_правило
+        else:
+            эталоны.update(с_нуля_вышло.targets)
     # без разрядки: по ним решается, выбился ли знак, если разрядка общая
     эталоны_ровно = dict(эталоны)
     if looseness:
@@ -734,6 +765,8 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         предел_прописных = предел_строчных
 
     def в_пределе(сдвиг, г):
+        if с_нуля:
+            return сдвиг
         предел = предел_прописных if г == UPPER else предел_строчных
         if предел is None:
             return сдвиг
@@ -848,9 +881,111 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     # ── знаки препинания: своя мера, против штамба прямой буквы ──
     items += [з for з in mark_items(master, items, rule.threshold * upm / 1000, рост, капитель, rule)
               if з.name not in fixed]
-    ширины = {з.name: з.target_advance for з in items if общая and з.applied(порог)}
-    return SpacingPlan(items, rule, эталоны, master.upm, профили, высотаЗоны,
+    ширины = {з.name: з.target_advance for з in items if (общая or с_нуля) and з.applied(порог)}
+    план = SpacingPlan(items, rule, эталоны, master.upm, профили, высотаЗоны,
                        space_target(master, rule, ширины))
+    план.from_zero = с_нуля
+    if с_нуля_вышло is not None:
+        план.side_h, план.side_source = с_нуля_вышло.side_h, с_нуля_вышло.source
+        план.side_letters = с_нуля_вышло.letters
+    return план
+
+
+class _ZeroTargets:
+    """Эталоны с нуля: `targets` — группа → белое; `source` — "set", "hand"
+    или "guess"; `letters` — буквы-образцы; `side_h` — то же как белое у
+    стороны H, тысячные кегля"""
+    __slots__ = ("targets", "source", "letters", "side_h")
+
+
+def _zero_targets(master, замеры, профили, поле, рост, капитель, рукописный):
+    """Эталоны белого шрифту без своей расстановки, по старшинству:
+
+    1. `поле` (единицы шрифта, 0 — нет) — число из окна: H встаёт со средним
+       белым у стороны `поле`, другие группы — с той же поправкой к тому, что
+       вышло бы без числа;
+    2. буквы, расставленные дизайнером (`zero.hand_spaced`): эталон группы —
+       среднее белое их сторон, другая группа — угаданное с той же поправкой.
+       Образцы выравниваются со всеми: оставь их как есть — и та же по форме
+       буква (h рядом с n) встала бы иначе, чем образец;
+    3. угадывание по форме (`zero.guess`): белое на строку полосы, умноженное
+       на высоту полосы группы (медиана по буквам).
+
+    Белое мягкой меры растёт с полем линейно (на высоту полосы за единицу).
+    None — эталон не задать"""
+    from . import zero
+
+    def поле_сейчас(з):
+        профиль = профили.get(з.имя)
+        if профиль is None:
+            return None
+        края = [(л + з.advance - п) / 2.0 for л, п in zip(профиль.left, профиль.right) if л is not None]
+        return sum(края) / len(края) if края else None
+
+    # прямая буква — мерка числа из окна и его вид в отчёте
+    прямая = None
+    for к in (0x48, 0x49, 0x4E, 0x41D):
+        з = next((з for з in замеры if з.код == к and з.группа == з.группаСправа), None)
+        if з is not None and поле_сейчас(з) is not None:
+            прямая = з
+            break
+
+    # группа правила для прописных и строчных: у юникейса все буквы — в одной
+    группа = {}
+    for регистр, буквы in (("upper", zero.CAPS), ("lower", zero.SMALL)):
+        коды = {ord(с) for с in буквы} | {zero.TWINS[с] for с in буквы if с in zero.TWINS}
+        свои = [з.группа for з in замеры if з.код in коды]
+        if свои and max(set(свои), key=свои.count) not in группа.values():
+            группа[регистр] = max(set(свои), key=свои.count)
+    полоса = {}
+    for г in группа.values():
+        высоты = [в for з in замеры if з.код is not None and з.группа == г for в in (з.высотаСлева, з.высотаСправа)]
+        if высоты:
+            полоса[г] = median(высоты)
+
+    угадано = {}
+    формы = zero.guess(master, рост, капитель, рукописный)
+    for регистр, г in группа.items():
+        if формы.get(регистр) and г in полоса:
+            угадано[г] = формы[регистр] * полоса[г]
+
+    вышло = _ZeroTargets()
+    вышло.targets, вышло.source, вышло.letters = dict(угадано), "guess", ()
+    ручные = zero.hand_spaced(master)
+    своё = {}
+    for з in замеры:
+        стороны = ручные.get(з.имя)
+        if стороны and з.группа == з.группаСправа:
+            своё.setdefault(з.группа, []).extend(
+                б for б, есть in ((з.белоеСлева, стороны[0]), (з.белоеСправа, стороны[1])) if есть)
+    if своё:
+        поправки = []
+        for г, белые in своё.items():
+            вышло.targets[г] = sum(белые) / len(белые)
+            if угадано.get(г, 0) > 0:
+                поправки.append(вышло.targets[г] / угадано[г])
+        if поправки:
+            k = sum(поправки) / len(поправки)
+            for г in угадано:
+                if г not in своё:
+                    вышло.targets[г] = угадано[г] * k
+        вышло.source = "hand"
+        вышло.letters = tuple(sorted(ручные))
+    if поле and прямая is not None:
+        цель = (прямая.белоеСлева + прямая.белоеСправа) / 2.0 + (поле - поле_сейчас(прямая)) * прямая.высотаСлева
+        было = вышло.targets.get(прямая.группа)
+        k = цель / было if было and было > 0 else 1.0
+        вышло.targets = {г: т * k for г, т in вышло.targets.items()}
+        вышло.targets[прямая.группа] = цель
+        вышло.source = "set"
+    if not вышло.targets:
+        return None
+    вышло.side_h = None
+    if прямая is not None and прямая.группа in вышло.targets:
+        белое = (прямая.белоеСлева + прямая.белоеСправа) / 2.0
+        поле_H = поле_сейчас(прямая) + (вышло.targets[прямая.группа] - белое) / прямая.высотаСлева
+        вышло.side_h = поле_H * 1000.0 / master.upm
+    return вышло
 
 
 def space_target(master, rule=None, ширины=None):

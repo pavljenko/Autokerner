@@ -5,7 +5,7 @@
 `auto.run` считает. Обёртка для FontLab 8 — `fontlab_bridge`.
 """
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 __copyright__ = "Copyright © 2026 Sasha Pavljenko"
 __license__ = "MIT"
 

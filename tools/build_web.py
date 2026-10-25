@@ -21,7 +21,7 @@ from autokerner import __version__, fontlab_ui, outcome  # noqa: E402
 from autokerner.options import FIGURES, PRESET_NOTES, PRESET_TITLES, PRESETS, Options  # noqa: E402
 
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
-MODULES = ["__init__", "unicode_props", "geometry", "model", "spacing", "kerning", "options", "auto",
+MODULES = ["__init__", "unicode_props", "geometry", "model", "zero_model", "zero", "spacing", "kerning", "options", "auto",
            "report", "outcome", "export", "otf", "fontfile", "web"]
 # что настраивается на странице (выделения, мастеров, формул и меток в файле нет)
 FIELDS = ["spacing", "space", "kerning", "kern_mode", "nbsp_follows_space", "looseness", "spacing_threshold",

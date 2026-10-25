@@ -69,10 +69,10 @@ class CorrectionsTest(unittest.TestCase):
     def test_wide_space_to_target_as_in_rule(self):
         """Выбор в окне «сузить до нормы» — пробел как в исходном правиле; набор возвращает умолчание"""
         m = [мастер(пробел=900, weight=300.0), мастер(пробел=900, weight=700.0)]
-        до_нормы = Options(kerning=False, space_edge=False, spacing_density=0)
+        до_нормы = Options(kerning=False, space_edge=False)
         self.assertEqual(auto.run(m, options=до_нормы).space, auto.run(m, kern=False).space)
-        # с общей плотностью строчные уже — и цель пробела меньше, от их новых ширин
-        плотно = auto.run(m, options=Options(kerning=False, space_edge=False)).space[0]
+        # с разрядкой плотнее строчные уже — и цель пробела меньше, от их новых ширин
+        плотно = auto.run(m, options=Options(kerning=False, space_edge=False, looseness=-10)).space[0]
         self.assertLess(плотно, auto.run(m, kern=False).space[0])
         self.assertFalse(Options.from_dict(до_нормы.to_dict()).space_edge)
         self.assertTrue(preset("display", до_нормы).space_edge)
@@ -395,12 +395,12 @@ def с_цифрами(жир=80, широкие=True):
 
 
 class DensityTest(unittest.TestCase):
-    """Общая плотность окна: −10 % разом у всех знаков группы, без порога"""
+    """Разрядка −10 %: разом у всех знаков группы, без порога; по умолчанию плотность своя"""
 
     def test_every_letter_moves_alike(self):
         m = [мастер(жир=80)]
-        ровно = auto.run(m, options=Options(kerning=False, spacing_density=0)).plans[0]
-        плотно = auto.run(m, options=Options(kerning=False)).plans[0]
+        ровно = auto.run(m, options=Options(kerning=False)).plans[0]
+        плотно = auto.run(m, options=Options(kerning=False, looseness=-10)).plans[0]
         сдвиги = set()
         for имя in ("n", "u", "o", "x"):
             а, б = ровно.item(имя), плотно.item(имя)
@@ -416,13 +416,23 @@ class DensityTest(unittest.TestCase):
 
     def test_classic_rule_untouched(self):
         self.assertEqual(Options.classic().total_looseness(), 0.0)
-        self.assertAlmostEqual(Options().total_looseness(), -0.1)
-        self.assertAlmostEqual(Options(looseness=10).total_looseness(), -0.01)
+        self.assertEqual(Options().total_looseness(), 0.0)
+        self.assertAlmostEqual(Options(looseness=-10).total_looseness(), -0.1)
+        self.assertAlmostEqual(Options(spacing_density=-10, looseness=10).total_looseness(), -0.01)
+
+    def test_default_keeps_font_colour(self):
+        """По умолчанию поля строчных — как у исходного правила (без общего сдвига плотности)"""
+        m = [мастер(жир=80)]
+        окно = auto.run(m, options=Options(kerning=False)).plans[0]
+        правило = auto.run(m, kern=False).plans[0]
+        for имя in ("n", "u", "o", "x"):
+            self.assertEqual((окно.item(имя).target_lsb, окно.item(имя).target_rsb),
+                             (правило.item(имя).target_lsb, правило.item(имя).target_rsb))
 
     def test_punctuation_follows_letters(self):
         m = [мастер(жир=80)]
-        ровно = auto.run(m, options=Options(kerning=False, spacing_density=0)).plans[0].item("period")
-        плотно = auto.run(m, options=Options(kerning=False)).plans[0].item("period")
+        ровно = auto.run(m, options=Options(kerning=False)).plans[0].item("period")
+        плотно = auto.run(m, options=Options(kerning=False, looseness=-10)).plans[0].item("period")
         self.assertLess(плотно.target_lsb + плотно.target_rsb, ровно.target_lsb + ровно.target_rsb)
 
 
@@ -513,3 +523,111 @@ class BelowCutTest(unittest.TestCase):
             мат = make_matrix(м, Options(kern_below_cut=cut).kern_law())
             i, k = мат.names.index("n"), мат.names.index("j")
             self.assertEqual(мат.values[i * мат.n + k] < 0, есть)
+
+
+def без_расстановки(поле=0):
+    """Синтетика без своей расстановки: у всех знаков поля `поле`, букв больше десяти"""
+    from autokerner.geometry import contours_rect, shift_contours
+    from autokerner.model import Glyph, Master
+    м = мастер()
+    знаки, буквы = [], {}
+    for g in м.glyphs:
+        рамка = contours_rect(g.contours) if g.contours else None
+        if рамка is None:
+            знаки.append(g)
+            continue
+        контуры = shift_contours(g.contours, поле - рамка[0])
+        знаки.append(Glyph(g.name, list(g.codes), int(рамка[2] - рамка[0]) + 2 * поле, контуры))
+        буквы[g.name] = знаки[-1]
+    # ещё буквы, чтобы проверка видела шрифт целиком: копии H, O, n
+    for имя, код, образец in (("A", 0x41, "H"), ("B", 0x42, "H"), ("C", 0x43, "O"), ("D", 0x44, "O"),
+                              ("E", 0x45, "H"), ("h", 0x68, "n"), ("m", 0x6D, "n"), ("a", 0x61, "o")):
+        о = буквы[образец]
+        знаки.append(Glyph(имя, [код], о.advance, о.contours))
+    return Master(1000, знаки, x_height=500, cap_height=700, label="без расстановки", weight=400.0)
+
+
+def с_полями(м, поля):
+    """Копия мастера, где у знаков `поля` (имя → (левое, правое)) поля поставлены вручную"""
+    from autokerner.geometry import contours_rect, shift_contours
+    from autokerner.model import Glyph, Master
+    знаки = []
+    for g in м.glyphs:
+        if g.name in поля and g.contours:
+            рамка = contours_rect(g.contours)
+            л, п = поля[g.name]
+            g = Glyph(g.name, list(g.codes), int(рамка[2] - рамка[0]) + л + п, shift_contours(g.contours, л - рамка[0]))
+        знаки.append(g)
+    return Master(м.upm, знаки, x_height=м.x_height, cap_height=м.cap_height, label=м.label, weight=м.weight)
+
+
+class FromZeroTest(unittest.TestCase):
+    """Расстановка с нуля: шрифт без своих полей"""
+
+    def test_detects_unspaced_only(self):
+        from autokerner import zero
+        self.assertTrue(zero.unspaced(без_расстановки(0)))
+        self.assertTrue(zero.unspaced(без_расстановки(50)))      # одинаковые поля, как у редактора
+        self.assertFalse(zero.unspaced(мастер()))
+
+    def test_spaces_from_zero(self):
+        м = без_расстановки(0)
+        план = auto.run([м], options=Options(kerning=False)).plans[0]
+        self.assertTrue(план.from_zero)
+        self.assertGreater(план.side_h, 20)
+        for имя in ("H", "n", "o", "O", "x"):
+            з = план.item(имя)
+            self.assertGreater(з.target_lsb, 0, имя)
+            self.assertGreater(з.target_rsb, 0, имя)
+
+    def test_side_h_by_hand(self):
+        """H — прямоугольники без засечек: среднее белое у стороны и есть поле"""
+        план = auto.run([без_расстановки(0)], options=Options(kerning=False, spacing_side_h=120)).plans[0]
+        з = план.item("H")
+        self.assertEqual((з.target_lsb, з.target_rsb), (120, 120))
+        self.assertEqual(план.side_h, 120)
+
+    def test_guess_both_groups(self):
+        from autokerner import spacing, zero
+        м = без_расстановки(0)
+        _upm, кап, рост = spacing.heights(м, True)
+        угадано = zero.guess(м, рост, кап)
+        self.assertEqual(set(угадано), {"upper", "lower"})
+        self.assertTrue(all(10 < v < 300 for v in угадано.values()), угадано)
+
+    def test_hand_spaced_letters_lead(self):
+        """n и o расставлены на глаз: плотность — их среднее белое, по ней встают все строчные (и сами
+        образцы), прописные — с той же поправкой к угадыванию"""
+        м = с_полями(без_расстановки(0), {"n": (70, 70), "o": (60, 60)})
+        план = auto.run([м], options=Options(kerning=False)).plans[0]
+        self.assertTrue(план.from_zero)
+        self.assertEqual((план.side_source, план.side_letters), ("hand", ("n", "o")))
+        n = план.item("n")
+        self.assertTrue(60 <= n.target_lsb <= 90, n.target_lsb)
+        # h и m — копии n: встают так же, как n
+        for имя in ("h", "m"):
+            з = план.item(имя)
+            self.assertEqual((з.target_lsb, з.target_rsb), (n.target_lsb, n.target_rsb), имя)
+        свободнее = с_полями(без_расстановки(0), {"n": (110, 110), "o": (95, 95)})
+        план2 = auto.run([свободнее], options=Options(kerning=False)).plans[0]
+        self.assertGreater(план2.item("H").target_lsb, план.item("H").target_lsb)
+        self.assertGreater(план2.side_h, план.side_h)
+
+    def test_number_wins_over_samples(self):
+        м = с_полями(без_расстановки(0), {"n": (70, 70), "o": (60, 60)})
+        план = auto.run([м], options=Options(kerning=False, spacing_side_h=120)).plans[0]
+        self.assertEqual(план.side_source, "set")
+        self.assertEqual((план.item("H").target_lsb, план.item("H").target_rsb), (120, 120))
+
+    def test_stray_letter_is_no_sample(self):
+        """поле у x (не из букв-образцов) — не образец: плотность угадывается"""
+        from autokerner import zero
+        м = с_полями(без_расстановки(0), {"x": (80, 80)})
+        self.assertEqual(zero.hand_spaced(м), {})
+        план = auto.run([м], options=Options(kerning=False)).plans[0]
+        self.assertEqual((план.side_source, план.side_letters), ("guess", ()))
+
+    def test_off_and_classic_keep_rule(self):
+        for o in (Options(kerning=False, spacing_from_zero=False), Options.classic(kerning=False)):
+            self.assertFalse(auto.run([без_расстановки(0)], options=o).plans[0].from_zero)
+        self.assertFalse(auto.run([мастер()], options=Options(kerning=False)).plans[0].from_zero)
