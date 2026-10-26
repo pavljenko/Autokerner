@@ -373,21 +373,291 @@ _TEXT = {
     "choosing_pairs": ("кернинг: подбираю пары", "kerning: choosing pairs"),
 }
 
+# Окно по-немецки: отдельный словарь, чтобы пары _TEXT шли в веб-версию как есть
+_TEXT_DE = {
+    "title": "Autokerner",
+    "masters_n": "Master: %d",
+    "glyphs_n": "Glyphen: %d",
+    "no_font": "Öffnen Sie eine Schrift in FontLab und starten Sie das Skript erneut.",
+    # ── слева: что сделать ──
+    "sec_what": "Was ändern",
+    "do_spacing": "Zurichtung – Vor- und Nachbreiten",
+    "do_spacing_tip": "Vor- und Nachbreite jeder Glyphe nach der Weißfläche, auf allen Mastern. "
+                      "Akzentbuchstaben und zusammengesetzte Glyphen folgen ihrer Grundform.",
+    "do_space": "Wortabstand – Breite des Leerzeichens",
+    "do_space_tip": "Breite des Leerzeichens als Anteil am Median der Kleinbuchstabenbreiten (siehe "
+                    "„Feineinstellung“). Geändert nur, wenn das Leerzeichen deutlich breiter ist als die Regel.",
+    "do_kerning": "Kerning – Klassen und Paare",
+    "do_kerning_tip": "Das Kerning wird mit den neuen Vor- und Nachbreiten gemessen: Klassen gemeinsam für "
+                      "alle Master, Werte je Master.",
+    "mode_label": "Eigenes Kerning der Schrift:",
+    "mode_replace": "Ganz ersetzen",
+    "mode_merge": "Ergänzen",
+    "mode_replace_note": "Bisherige Kerningpaare und -klassen werden entfernt, die neuen geschrieben.",
+    "mode_merge_note": "Ihre Paare und Klassen bleiben, wie sie sind; nur fehlende Paare kommen hinzu "
+                       "(als Glyphenpaare). Ein leeres Kerning wird vollständig geschrieben.",
+    "sec_where": "Welche Glyphen",
+    "glyphs_all": "Alle Glyphen",
+    "glyphs_sel": "Nur die im Schriftfenster ausgewählten",
+    "glyphs_sel_n": "Nur die im Schriftfenster ausgewählten (jetzt: %d)",
+    "glyphs_sel_tip": "Nur die ausgewählten Glyphen werden zugerichtet; das Kerning wird als Glyphenpaare mit "
+                      "ihnen geschrieben, das übrige bleibt unberührt. Die Auswahl wird beim Klick auf "
+                      "„Berechnen“ gelesen.",
+    "keep_formula": "Glyphen mit Metrikformeln nicht ändern",
+    "keep_formula_tip": "Glyphen, deren Vorbreite, Nachbreite oder Breite eine FontLab-Formel ist (=H, =n+10): "
+                        "Eine Änderung würde die Formel überschreiben.",
+    "keep_marked": "Glyphen mit Farbmarkierung nicht ändern",
+    "keep_marked_tip": "Markieren Sie von Hand abgestimmte Glyphen farbig (Glyph → Flag) – die Berechnung lässt "
+                       "dann ihre Vor- und Nachbreiten und ihr Kerning unberührt: Paare mit ihnen bleiben, wie sie "
+                       "waren, ebenso die der Akzentbuchstaben auf ihrer Grundlage. Bekommt ein Nachbar neue Vor- "
+                       "und Nachbreiten, behalten diese Paare ihre Werte, der Abstand kann aber anders wirken.",
+    "nbsp": "Geschütztes Leerzeichen wie Wortabstand",
+    "nbsp_tip": "Unterschiedliche Breiten von Leerzeichen und geschütztem Leerzeichen sind ein häufiger Fehler "
+                "(FontBakery prüft das).",
+    "sec_masters": "Master",
+    "sec_rule": "Regel",
+    "preset": "Vorgabe:",
+    "custom": "Eigene",
+    "custom_note": "Werte von Hand geändert.",
+    "fine": "Feineinstellung",
+    "sub_spacing": "Zurichtung",
+    "looseness": "Laufweite",
+    "looseness_tip": "Insgesamt enger (−) oder weiter (+): Der Zielwert der Weißfläche wird mit 1 + Anteil "
+                     "multipliziert. 0 behält den Grauwert der Schrift. Alle Glyphen einer Gruppe verschieben "
+                     "sich gleich.",
+    "threshold": "Empfindlichkeit",
+    "threshold_tip": "Eine Glyphe wird geändert, wenn eine Vor- oder Nachbreite um mehr als so viele "
+                     "Tausendstel Geviert von der Regel abweicht. Kleiner – mehr Änderungen.",
+    "word_gap": "Wortabstand – Anteil",
+    "word_gap_tip": "Zielbreite des Leerzeichens – dieser Anteil am Median der Kleinbuchstabenbreiten.",
+    "space_fit": "Breiter Wortabstand",
+    "space_fit_items": "bis zum Toleranzrand|bis zum Zielwert",
+    "space_fit_tip": "Ein Leerzeichen, das um mehr als ein Viertel breiter ist als der Zielwert, wird verengt. "
+                     "„Bis zum Toleranzrand“ ist vorsichtig: Das Leerzeichen bleibt am oberen Rand der "
+                     "Toleranz. „Bis zum Zielwert“ geht ganz bis zur Zielbreite, wie in der ursprünglichen "
+                     "Regel: ein dichterer Satz, gut für schmale Schriften und Akzidenzschriften.",
+    "sub_kerning": "Kerning",
+    "strength": "Stärke",
+    "strength_tip": "Wie viel der weißen „Tasche“ zwischen den Glyphen geschlossen wird: 100 % – die Regel, "
+                    "mehr – stärkere Paare.",
+    "kthreshold": "Paare erst ab",
+    "kthreshold_tip": "Paare unter diesem Wert (Tausendstel Geviert) werden nicht geschrieben.",
+    "clearance": "Mindestabstand",
+    "clearance_tip": "Die Formen eines Paares kommen sich nie näher als dieser Wert (Tausendstel Geviert).",
+    "precision": "Klassengenauigkeit",
+    "precision_tip": "Wie weit ein Klassenpaar vom genauen Wert abweichen darf. Feiner – mehr Klassen und "
+                     "Paare, größere Datei.",
+    "limit": "Höchstzahl Glyphenpaare",
+    "limit_tip": "Wie viele Glyphenpaare (Ausnahmen von den Klassen) geschrieben werden. Gemessen werden immer "
+                 "alle Paare; die Grenze greift nur bei großen Schriften (Hunderte Glyphen und mehr): Dann "
+                 "werden die auffälligsten geschrieben, und die Klassengenauigkeit wird gröber.",
+    "round": "Rundung",
+    "round_tip": "Werte sind Vielfache der Schrittweite (gerundet in Richtung weiter).",
+    "max_tight": "Nie enger als",
+    "max_tight_tip": "Das stärkste Paar wird auf diesen Wert begrenzt (Tausendstel Geviert); 0 – ohne Grenze.",
+    "max_loose": "Nie weiter als",
+    "max_loose_tip": "Ein Paar wird nie um mehr als diesen Wert (Tausendstel Geviert) auseinandergerückt, auch "
+                     "wenn sich die Formen näher kommen als der Mindestabstand: Sonst könnten der Schwanz des Q "
+                     "oder ein Bruchstrich ein Paar um ein halbes Geviert auseinanderschieben; 0 – ohne Grenze.",
+    "no_limit": "ohne Grenze",
+    "figures": "Ziffern mit , . :",
+    "figures_items": "wie in der Regel|ohne Kollision (7,4 · 3.5 · 12:30)|ohne Kerning",
+    "figures_tip": "Die Regel zieht Komma, Punkt und Doppelpunkt paarweise an eine Ziffer heran, sodass in "
+                   "Zahlen wie 7,4 die Ziffern über das Zeichen hinweg ineinanderlaufen können. „Ohne "
+                   "Kollision“: Die rechte Ziffer wird nie an das Zeichen oder darüber gezogen, und über "
+                   "das Zeichen hinweg stehen die Ziffern nie enger als direkt nebeneinander – dafür wird das "
+                   "Paar Ziffer + Zeichen gelockert (das Komma bleibt bei der Ziffer links: „1917,“). „Ohne "
+                   "Kerning“ lässt diese Paare ungekernt.",
+    "per_mille": " /1000",
+    "side_h": "Von Grund auf: H-Seite",
+    "side_h_tip": "Hat die Schrift keine eigene Zurichtung (Vor- und Nachbreiten null oder bei allen "
+                  "Buchstaben gleich), richtet das Skript sie von Grund auf zu. Den Grauwert nimmt es von "
+                  "Musterbuchstaben, wenn Sie einige von n o h u m i l H O I N U nach Augenmaß zugerichtet "
+                  "haben: Die übrigen folgen ihnen (die Muster werden mit den anderen ausgeglichen). Sonst wird "
+                  "der Grauwert aus den Buchstabenformen geschätzt. Hier lässt er sich als Zahl setzen: das "
+                  "mittlere Weiß neben H, in Tausendstel Geviert; „auto“ – nicht gesetzt. Bei einer "
+                  "zugerichteten Schrift hat dieses Feld keine Wirkung.",
+    "auto": "auto",
+    "from_zero_on": "Schrift ohne Zurichtung von Grund auf zurichten",
+    "from_zero_on_tip": "Eine Schrift ohne Zurichtung: Vor- und Nachbreiten null oder bei fast allen "
+                        "Buchstaben gleich. Dicktengleiche und Pixelschriften bleiben unberührt. Entfernen Sie "
+                        "das Häkchen, wenn Ihre gleichen Vor- und Nachbreiten Absicht sind.",
+    "from_zero": "Die Schrift hat keine eigene Zurichtung, deshalb wurde sie von Grund auf zugerichtet. Weiß "
+                 "neben H: %s Tausendstel Geviert (%s). Enger oder weiter: „Feineinstellung“ → „Von Grund "
+                 "auf: H-Seite“ oder „Laufweite“.",
+    "side_guessed": "aus den Formen geschätzt; genauer, wenn Sie n und o nach Augenmaß zurichten und neu "
+                    "berechnen",
+    "side_set": "als Zahl gesetzt",
+    "side_hand": "nach den von Hand zugerichteten Buchstaben: %s",
+    "reset": "Einstellungen zurücksetzen",
+    # ── справа ──
+    "tab_settings": "Einstellungen",
+    "tab_summary": "Übersicht",
+    "to_panel": "Als Panel",
+    "to_window": "Als Fenster",
+    "to_panel_tip": "Als schmales Panel am Rand des FontLab-Fensters. Sie können das Fenster auch an der "
+                    "Titelleiste an den Rand des Schriftfensters, der FontLab-Panels oder des Bildschirms "
+                    "ziehen – es rastet ein und wird zum Panel.",
+    "to_window_tip": "Als breites Fenster. Sie können das Panel auch an der Titelleiste vom Rand wegziehen.",
+    "tab_preview": "Vorschau",
+    "tab_edits": "Änderungen",
+    "empty": "<h2>So funktioniert es</h2><ol>"
+             "<li>Wählen Sie links, was berechnet werden soll und für welche Glyphen.</li>"
+             "<li><b>Berechnen</b> – die Schrift bleibt unverändert.</li>"
+             "<li>Prüfen Sie die Übersicht, die Vorschau „jetzt / nachher“ und die Änderungen: Was Sie nicht "
+             "wollen, wählen Sie ab.</li>"
+             "<li><b>Anwenden</b> – schreibt in die Schrift, auf allen gewählten Mastern.</li>"
+             "<li><b>Rückgängig</b> – nimmt das Schreiben zurück, solange das Fenster offen ist.</li></ol>"
+             "<p>Das Fenster kann offen bleiben: Wählen Sie Glyphen im Schriftfenster aus und berechnen Sie "
+             "neu.</p>",
+    "what_changes": "Was sich ändert",
+    "spacing": "Zurichtung",
+    "space": "Wortabstand",
+    "kerning": "Kerning",
+    "not_calc": "nicht berechnet",
+    "spacing_cap": "Glyphen mit neuen Vor- und Nachbreiten von %d",
+    "spacing_none": "alle Vor- und Nachbreiten passen zur Regel",
+    "space_cap": "Einheiten, %s",
+    "space_none": "passt zur Regel – unverändert",
+    "kern_pairs": "Paare",
+    "kern_whole": "ganz ersetzen",
+    "kern_whole_n": "Klassen %d + %d · Klassenpaare %s · Glyphenpaare %s",
+    "kern_missing": "ergänzen: %s Glyphenpaare, die der Schrift fehlen",
+    "kern_selected": "für Ausgewählte ersetzen: %s Glyphenpaare",
+    "kern_size": "≈ %s KB je Master in der Datei",
+    "notes": "Bitte beachten",
+    "protected": "Vor- und Nachbreiten bleiben unverändert bei %s.",
+    "pr_formula": "%d mit Metrikformeln",
+    "pr_mark": "%d mit Markierung",
+    "kept_kern": "Kerning unverändert bei %s markierten Glyphen und ihren Akzentformen: %s bisherige Paare "
+                 "erhalten.",
+    "pr_selection": "%d nicht ausgewählten",
+    "pr_rejected": "%d von Ihnen abgewählten",
+    "truncated": "Glyphenpaare über der Grenze: %s (die schwächsten). Die Grenze steht in der "
+                 "„Feineinstellung“.",
+    "kern_feature_will": "Der Feature-Code der Schrift (Panel Features) enthält ein kern-Feature mit dem "
+                         "bisherigen Kerning – FontLab exportiert es anstelle des Kernings. „Anwenden“ entfernt "
+                         "es („Rückgängig“ stellt es wieder her).",
+    "subset": "Das Kerning wird auf %d von %d Mastern geschrieben; deren Klassen weichen dann von den übrigen "
+              "ab. Bei einer variablen Schrift ist es sicherer, alle Master auf einmal zu berechnen.",
+    "collisions": "In Zahlen laufen die Ziffern über Komma, Punkt oder Doppelpunkt ineinander: %s "
+                  "(%d Kombinationen). Abhilfe: „Feineinstellung“ → „Ziffern mit , . :“ → „ohne Kollision“.",
+    "tip_save": "„Rückgängig“ wirkt, solange das Fenster offen ist; sicherer ist es, die Schrift vor dem "
+                "Anwenden zu speichern.",
+    "control": "Kontrollpaare",
+    "biggest": "Größte Änderungen der Vor- und Nachbreiten",
+    "changes": "Größte Paaränderungen",
+    "glyph": "Glyphe",
+    "master": "Master",
+    "lsb": "Vorbreite",
+    "rsb": "Nachbreite",
+    "width": "Breite",
+    "pair": "Paar",
+    "before": "Vorher",
+    "after": "Nachher",
+    "now": "Jetzt",
+    "applied_banner": "✓ In die Schrift geschrieben: Glyphen %d, Klassenpaare %s, Glyphenpaare %s. Prüfung: %s.",
+    "reverted_banner": "↺ Rückgängig gemacht. Das Ergebnis unten kann erneut angewendet werden.",
+    "cancel": "Abbrechen",
+    # строка
+    "preview_empty": "Klicken Sie auf „Berechnen“ – hier erscheint die Zeile „jetzt / nachher“.",
+    "preview_kern": "mit Kerning",
+    "preview_hint": "Oben – jetzt, unten – nachher; blau – Glyphen mit neuen Vor- und Nachbreiten. "
+                    "„/name“ – eine Glyphe nach Namen: /A/V/period.",
+    # правки
+    "search": "Glyphe suchen: Zeichen oder Name",
+    "edits_glyphs": "Vor- und Nachbreiten: %d",
+    "edits_pairs_top": "Kerningpaare: %d größte Änderungen",
+    "edits_pairs_glyph": "Kerningpaare mit „%s“: %d",
+    "edits_pairs_none": "Glyphe „%s“ nicht gefunden",
+    "edits_hint": "Ein abgewähltes Paar bleibt, wie es in der Schrift ist. Eine abgewählte Glyphe wird nicht "
+                  "zugerichtet – klicken Sie auf „Berechnen“, um das zu berücksichtigen (das Kerning wird neu "
+                  "gemessen).",
+    "kept": "unverändert",
+    "counting_pairs": "Paare des Masters werden gesucht…",
+    # кнопки и ход
+    "calc": "Berechnen",
+    "stop": "Stopp",
+    "apply": "Anwenden",
+    "revert": "Rückgängig",
+    "save": "Bericht speichern…",
+    "close": "Schließen",
+    "ready": "Wählen Sie, was berechnet werden soll, und klicken Sie auf „Berechnen“. Die Schrift bleibt bis "
+             "„Anwenden“ unverändert.",
+    "progress": "Wird berechnet…",
+    "stopped": "Angehalten. Die Schrift wurde nicht geändert.",
+    "stopped_kept": "Angehalten. Die Schrift wurde nicht geändert; das vorige Ergebnis gilt weiter.",
+    "nothing": "Nichts gewählt: Haken Sie Zurichtung, Wortabstand oder Kerning an.",
+    "no_masters": "Kein Master gewählt.",
+    "sel_unknown": "Die Auswahl im Schriftfenster konnte nicht gelesen werden.",
+    "sel_empty": "Im Schriftfenster ist nichts ausgewählt.",
+    "done_calc": "Berechnet in %.0f s. Prüfen Sie die Übersicht und klicken Sie auf „Anwenden“.",
+    "stale": "Einstellungen geändert – klicken Sie auf „Berechnen“, um das Ergebnis zu aktualisieren.",
+    "stale_glyphs": "Abgewählte Glyphen wirken nach „Berechnen“.",
+    "font_changed": "Die Schrift hat sich nach der Berechnung geändert – bitte neu berechnen.",
+    "applying": "Wird geschrieben…",
+    "done_apply": "Geschrieben: Glyphen %d, Klassenpaare %s, Glyphenpaare %s. Prüfung: %s.",
+    "check_ok": "alles stimmt",
+    "check_bad": "%d Abweichungen – die ersten: %s",
+    "panels": "Die Panels Kerning, Classes und Features aktualisieren sich nicht von selbst – schließen und "
+              "öffnen Sie sie neu.",
+    "revert_q": "Die Schrift auf den Stand vor dem letzten Schreiben zurücksetzen? Danach von Hand "
+                "vorgenommene Kerningänderungen gehen verloren.",
+    "reverting": "Wird zurückgesetzt…",
+    "done_revert": "Rückgängig gemacht. Prüfung: %s.",
+    "lost_zero": " Klassenpaare mit null (%d) speichert FontLab nicht – sie wurden nicht wiederhergestellt.",
+    "save_title": "Ordner für den Bericht",
+    "saved": "%d Dateien in „%s“ gespeichert.",
+    "error": "Fehler",
+    "report_bug": "Fehler melden",
+    "report_bug_tip": "Adresse des Autors kopieren: %s",
+    "email_copied": "Die Adresse %s ist kopiert.\n\nBitte beschreiben Sie, was passiert ist: welche Schrift "
+                    "(hängen Sie sie wenn möglich an), was Sie geklickt und was Sie gesehen haben. Ein "
+                    "Bildschirmfoto hilft sehr.",
+    "site_tip": "Website des Autors: %s",
+    "free": "Kostenlos und quelloffen ·",
+    "support": "Den Autor unterstützen ♥",
+    "support_tip": "Das Skript ist kostenlos und bleibt es. Unterstützung ist freiwillig: Sie hilft, Zeit für "
+                   "Korrekturen und neue Funktionen zu finden.",
+    "support_after": "Wenn Ihnen das Skript Zeit gespart hat, können Sie den Autor unterstützen – freiwillig.",
+    "diff_width": "%s/%s: Breite %d statt %d",
+    "diff_shift": "%s/%s: Kontur um %.2f statt %d verschoben",
+    "diff_kern": "%s %s/%s: Kerning %s statt %s",
+    "diff_offset": "%s/%s: Kontur um %.2f versetzt",
+    "diff_pairs": "%s: %d Kerningpaare weichen ab",
+    "diff_classes": "%s: Kerningklassen weichen ab",
+    "choosing_pairs": "Kerning: Paare werden ausgewählt",
+}
+
+# Наборы правила по-немецки: (название, пояснение)
+_PRESET_DE = {
+    "default": ("Text – Standardregel", "Für Fließtext und die meisten Schriften."),
+    "display": ("Display – enger, stärkeres Kerning",
+                "Für große Schriftgrade: Laufweite −8 %, stärkeres Kerning, kleinerer Mindestabstand, feinere "
+                "Klassen, Paare ohne Grenze – größere Datei."),
+    "light": ("Leichtes Kerning – kleine Datei",
+              "Nur sichtbare Paare, Werte in Fünferschritten, bis zu 3 000 Glyphenpaare – für das Web und "
+              "kleine Dateien."),
+}
+
+_LANGS = ("ru", "en", "de")
+
 
 def _lang():
-    """Язык окна — по языку интерфейса системы: русский — по-русски, любой
-    другой — по-английски. AUTOKERNER_LANG=ru|en — для проверки"""
+    """Язык окна — по языку интерфейса системы: русский — по-русски,
+    немецкий — по-немецки, любой другой — по-английски.
+    AUTOKERNER_LANG=ru|en|de — для проверки"""
     свой = os.environ.get("AUTOKERNER_LANG", "").lower()
-    if свой in ("ru", "en"):
-        return 0 if свой == "ru" else 1
+    if свой in _LANGS:
+        return _LANGS.index(свой)
     try:
         from PythonQt import QtCore
         локаль = QtCore.QLocale.system()
         языки = локаль.uiLanguages
         if callable(языки):
             языки = языки()
-        первый = str(языки[0]) if языки else str(локаль.name())
-        return 0 if первый.lower().startswith("ru") else 1
+        первый = (str(языки[0]) if языки else str(локаль.name())).lower()
+        return 0 if первый.startswith("ru") else 2 if первый.startswith("de") else 1
     except Exception:
         return 1
 
@@ -396,16 +666,25 @@ LANG = _lang()
 
 
 def t(key):
-    return _TEXT[key][LANG]
+    return _TEXT_DE[key] if LANG == 2 else _TEXT[key][LANG]
+
+
+def preset_title(key):
+    return _PRESET_DE[key][0] if LANG == 2 else PRESET_TITLES[key][LANG]
+
+
+def preset_note(key):
+    return _PRESET_DE[key][1] if LANG == 2 else PRESET_NOTES[key][LANG]
 
 
 def support_url():
-    """Страница скрипта с кнопкой «Поддержать» — на языке окна"""
-    return SUPPORT_URL + ("?lang=en" if LANG == 1 else "")
+    """Страница скрипта с кнопкой «Поддержать» — на языке окна (немецкой
+    страницы у сайта нет — английская)"""
+    return SUPPORT_URL + ("" if LANG == 0 else "?lang=en")
 
 
 # Сообщения о ходе и ошибки идут из расчёта и моста по-русски; окно на
-# английском переводит их здесь
+# английском и немецком переводит их здесь
 _TR_EN = [(re.compile(шаблон), замена) for шаблон, замена in (
     (r"^читаю мастер (\d+) из (\d+): знак (\d+) из (\d+)$", r"reading master \1 of \2: glyph \3 of \4"),
     (r"^апроши: мастер (\d+) из (\d+)$", r"spacing: master \1 of \2"),
@@ -426,13 +705,34 @@ _TR_EN = [(re.compile(шаблон), замена) for шаблон, замен�
      r"the masters have different glyph sets — kerning cannot be combined across them"),
 )]
 
+_TR_DE = [(re.compile(шаблон), замена) for шаблон, замена in (
+    (r"^читаю мастер (\d+) из (\d+): знак (\d+) из (\d+)$", r"Master \1 von \2 wird gelesen: Glyphe \3 von \4"),
+    (r"^апроши: мастер (\d+) из (\d+)$", r"Zurichtung: Master \1 von \2"),
+    (r"^кернинг: мастер (\d+) из (\d+), знак (\d+) из (\d+)$", r"Kerning: Master \1 von \2, Glyphe \3 von \4"),
+    (r"^кернинг: мастер (\d+) из (\d+)$", r"Kerning: Master \1 von \2"),
+    (r"^кернинг: классы на все мастера$", r"Kerning: Klassen für alle Master"),
+    (r"^кернинг: классы, точность ([\d.]+) — знак (\d+) из (\d+)$",
+     r"Kerning: Klassen, Genauigkeit \1 – Glyphe \2 von \3"),
+    (r"^кернинг: пары знаков — знак (\d+) из (\d+)$", r"Kerning: Glyphenpaare – Glyphe \1 von \2"),
+    (r"^кернинг: снимок прежнего$", r"Kerning: bisheriges Kerning wird gesichert"),
+    (r"^кернинг: подбираю пары$", r"Kerning: Paare werden ausgewählt"),
+    (r"^кернинг: снимаю прежний$", r"Kerning: bisheriges Kerning wird entfernt"),
+    (r"^возвращаю поля$", r"Vor- und Nachbreiten werden wiederhergestellt"),
+    (r"^возвращаю кернинг$", r"Kerning wird wiederhergestellt"),
+    (r"^Нет открытого шрифта$", r"Keine Schrift geöffnet"),
+    (r"^компоненты «(.+)» ссылаются по кругу$", r"Die Komponenten von „\1“ verweisen im Kreis aufeinander"),
+    (r"^знаки мастеров разошлись — кернинг по мастерам не сводится$",
+     r"Die Master haben unterschiedliche Glyphensätze – das Kerning lässt sich nicht über alle Master "
+     r"zusammenführen"),
+)]
+
 
 def _tr(текст):
     """Сообщение расчёта на языке окна"""
     текст = str(текст)
     if LANG == 0:
         return текст
-    for шаблон, замена in _TR_EN:
+    for шаблон, замена in (_TR_DE if LANG == 2 else _TR_EN):
         if шаблон.match(текст):
             return шаблон.sub(замена, текст)
     return текст
@@ -449,7 +749,7 @@ def _num(x):
 def _n(x):
     """Число с разрядами: 12 000 / 12,000"""
     текст = "{:,}".format(int(x))
-    return текст.replace(",", " ") if LANG == 0 else текст
+    return текст if LANG == 1 else текст.replace(",", " ")
 
 
 def _table(head, rows):
@@ -979,7 +1279,7 @@ class Window:
         ряд = QtGui.QHBoxLayout()
         ряд.addWidget(QtGui.QLabel(t("preset")))
         self.preset = QtGui.QComboBox()
-        self.preset.addItems([PRESET_TITLES[к][LANG] for к in _PRESET_KEYS[:-1]] + [t("custom")])
+        self.preset.addItems([preset_title(к) for к in _PRESET_KEYS[:-1]] + [t("custom")])
         self.preset.connect("currentIndexChanged(int)", self._preset_chosen)
         ряд.addWidget(self.preset, 1)
         с.addLayout(ряд)
@@ -1233,7 +1533,7 @@ class Window:
                      self.co_precision, self.co_limit, self.co_round, self.sp_max_tight, self.sp_max_loose):
             поле.setEnabled(кернинг)
         ключ = _PRESET_KEYS[max(0, self.preset.currentIndex)]
-        self.preset_note.setText(PRESET_NOTES[ключ][LANG] if ключ in PRESET_NOTES else t("custom_note"))
+        self.preset_note.setText(preset_note(ключ) if ключ in PRESET_NOTES else t("custom_note"))
 
     def _changed(self, *_):
         if self.filling:

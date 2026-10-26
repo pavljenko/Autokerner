@@ -145,7 +145,8 @@ needed.
 ![The Autokerner window](docs/images/02-window.png)
 
 1. Open a font and choose **Scripts → Autokerner**. The window is in Russian
-   if your system language is Russian and in English otherwise. It floats next
+   or German if your system language is Russian or German, and in English
+   otherwise. It floats next
    to the font like FontLab's own panels, so you can select glyphs in the font
    window and calculate again. It has two formats, a wide window and a narrow
    full-height panel: switch with the button in the top right corner, or drag
