@@ -525,11 +525,11 @@ class BelowCutTest(unittest.TestCase):
             self.assertEqual(мат.values[i * мат.n + k] < 0, есть)
 
 
-def без_расстановки(поле=0):
-    """Синтетика без своей расстановки: у всех знаков поля `поле`, букв больше десяти"""
+def без_расстановки(поле=0, жир=80):
+    """Синтетика без своей расстановки: у всех знаков поля `поле`, букв больше десяти; `жир` — штамб"""
     from autokerner.geometry import contours_rect, shift_contours
     from autokerner.model import Glyph, Master
-    м = мастер()
+    м = мастер(жир=жир)
     знаки, буквы = [], {}
     for g in м.glyphs:
         рамка = contours_rect(g.contours) if g.contours else None
@@ -618,6 +618,40 @@ class FromZeroTest(unittest.TestCase):
         план = auto.run([м], options=Options(kerning=False, spacing_side_h=120)).plans[0]
         self.assertEqual(план.side_source, "set")
         self.assertEqual((план.item("H").target_lsb, план.item("H").target_rsb), (120, 120))
+
+    def веса(self):
+        """три веса без своих полей: светлый, средний, жирный"""
+        return [без_расстановки(0, жир=ж) for ж in (40, 80, 140)]
+
+    def test_samples_lead_all_masters(self):
+        """n и o расставлены только в среднем весе: он держит их плотность, остальные берут ту же
+        поправку к своей угаданной — порядок весов не ломается, средний не выбивается из ряда"""
+        веса = self.веса()
+        веса[1] = с_полями(веса[1], {"n": (95, 95), "o": (85, 85)})
+        планы = auto.run(веса, options=Options(kerning=False)).plans
+        self.assertEqual([п.side_source for п in планы], ["carried", "hand", "carried"])
+        угадано = auto.run(self.веса(), options=Options(kerning=False)).plans
+        поправка = планы[1].zero_scale
+        for w in (0, 2):
+            for г, k in поправка.items():
+                self.assertAlmostEqual(планы[w].zero_scale[г], k, places=6)
+            self.assertNotEqual(планы[w].side_h, угадано[w].side_h)
+        self.assertGreater(планы[0].side_h, планы[1].side_h)
+        self.assertGreater(планы[1].side_h, планы[2].side_h)
+
+    def test_number_sets_middle_weight(self):
+        """число из окна задаёт средний по толщине штамба мастер, остальные — с той же поправкой
+        (раньше всем весам ставилось одно поле H)"""
+        планы = auto.run(self.веса(), options=Options(kerning=False, spacing_side_h=120)).plans
+        self.assertEqual([п.side_source for п in планы], ["carried", "set", "carried"])
+        self.assertEqual((планы[1].item("H").target_lsb, планы[1].item("H").target_rsb), (120, 120))
+        self.assertGreater(планы[0].side_h, 120)
+        self.assertLess(планы[2].side_h, 120)
+
+    def test_one_master_unchanged(self):
+        """у одного мастера переносить некуда: как раньше"""
+        м = с_полями(без_расстановки(0), {"n": (70, 70), "o": (60, 60)})
+        self.assertEqual(auto.run([м], options=Options(kerning=False)).plans[0].side_source, "hand")
 
     def test_stray_letter_is_no_sample(self):
         """поле у x (не из букв-образцов) — не образец: плотность угадывается"""

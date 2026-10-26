@@ -173,6 +173,8 @@ _TEXT = {
                    "некоторые из n o h u m i l H O I N U (или п о н и Н О П И): остальные встанут по ним "
                    "(образцы выровняются вместе со всеми). Иначе плотность угадывается по форме букв. Здесь её "
                    "можно задать числом: среднее белое у стороны H, тысячных кегля; «авто» — не задавать. "
+                   "У многомастерного шрифта число задаёт средний по жирности мастер, а образцы — тот, где они "
+                   "расставлены; остальные мастера идут за ним с той же поправкой и сохраняют разницу весов. "
                    "У расставленного шрифта это поле ни на что не влияет.",
                    "If the font has no spacing of its own (zero sidebearings, or the same ones on every letter), "
                    "the script spaces it from scratch. It takes the colour from sample letters if you have "
@@ -180,7 +182,9 @@ _TEXT = {
                    "evened out along with the others). Otherwise the colour is guessed from the letter shapes. "
                    "Here you can set it as "
                    "a number: the average white beside H, in thousandths of the em; “auto” leaves it unset. "
-                   "For a spaced font this field does nothing."),
+                   "In a multi-master font the number sets the master of middle weight, and samples set the master "
+                   "where they are spaced; the other masters follow it with the same correction and keep the "
+                   "difference between weights. For a spaced font this field does nothing."),
     "auto": ("авто", "auto"),
     "from_zero_on": ("Расставлять с нуля шрифт без своей расстановки", "Space a font with no spacing from scratch"),
     "from_zero_on_tip": ("Шрифт без своей расстановки — поля нулевые или у почти всех букв одинаковые. "
@@ -198,6 +202,7 @@ _TEXT = {
                      "guessed from the shapes; for more accuracy, space n and o by eye and run again"),
     "side_set": ("задано числом", "set as a number"),
     "side_hand": ("по буквам, расставленным вручную: %s", "from the letters spaced by hand: %s"),
+    "side_carried": ("; у остальных мастеров — с той же поправкой", "; the other masters follow with the same correction"),
     "reset": ("Сбросить настройки", "Reset settings"),
     # ── справа ──
     "tab_settings": ("Настройки", "Settings"),
@@ -475,8 +480,10 @@ _TEXT_DE = {
                   "Musterbuchstaben, wenn Sie einige von n o h u m i l H O I N U nach Augenmaß zugerichtet "
                   "haben: Die übrigen folgen ihnen (die Muster werden mit den anderen ausgeglichen). Sonst wird "
                   "der Grauwert aus den Buchstabenformen geschätzt. Hier lässt er sich als Zahl setzen: das "
-                  "mittlere Weiß neben H, in Tausendstel Geviert; „auto“ – nicht gesetzt. Bei einer "
-                  "zugerichteten Schrift hat dieses Feld keine Wirkung.",
+                  "mittlere Weiß neben H, in Tausendstel Geviert; „auto“ – nicht gesetzt. Bei mehreren Mastern "
+                  "bestimmt die Zahl den Master mittlerer Stärke und die Musterbuchstaben den Master, in dem sie "
+                  "zugerichtet sind; die übrigen Master folgen mit derselben Korrektur und behalten den Unterschied "
+                  "der Stärken. Bei einer zugerichteten Schrift hat dieses Feld keine Wirkung.",
     "auto": "auto",
     "from_zero_on": "Schrift ohne Zurichtung von Grund auf zurichten",
     "from_zero_on_tip": "Eine Schrift ohne Zurichtung: Vor- und Nachbreiten null oder bei fast allen "
@@ -489,6 +496,7 @@ _TEXT_DE = {
                     "berechnen",
     "side_set": "als Zahl gesetzt",
     "side_hand": "nach den von Hand zugerichteten Buchstaben: %s",
+    "side_carried": "; die übrigen Master folgen mit derselben Korrektur",
     "reset": "Einstellungen zurücksetzen",
     # ── справа ──
     "tab_settings": "Einstellungen",
@@ -827,10 +835,15 @@ def report_html(report, info):
         поля = " · ".join(("%s %s" % (имя, _n(round(поле)) if поле is not None else "—")
                            if len(info["from_zero"]) > 1 else (_n(round(поле)) if поле is not None else "—"))
                           for имя, поле, _откуда, _буквы in info["from_zero"])
-        _имя, _поле, откуда, буквы = info["from_zero"][0]
-        заметки.append(_e(t("from_zero") % (поля, t("side_set") if откуда == "set" else
-                                             t("side_hand") % " ".join(буквы) if откуда == "hand" else
-                                             t("side_guessed"))))
+        # источник плотности — у опорного мастера (число или образцы), остальные несут его поправку
+        источники = [откуда for _имя, _поле, откуда, _буквы in info["from_zero"]]
+        откуда = "set" if "set" in источники else "hand" if "hand" in источники else "guess"
+        буквы = next((б for _имя, _поле, о, б in info["from_zero"] if о == "hand"), ())
+        как = (t("side_set") if откуда == "set" else t("side_hand") % " ".join(буквы) if откуда == "hand" else
+               t("side_guessed"))
+        if "carried" in источники:
+            как += t("side_carried")
+        заметки.append(_e(t("from_zero") % (поля, как)))
     if info.get("collisions"):
         примеры, всего = info["collisions"]
         заметки.append(_e(t("collisions") % (" · ".join(примеры), всего)))

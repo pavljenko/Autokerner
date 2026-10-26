@@ -80,14 +80,17 @@ class SpacingRule:
     берётся не из полей шрифта (`_zero_targets`): с букв, которые дизайнер
     расставил сам (`zero.hand_spaced`), иначе угадывается по форме
     (`zero.guess`); side_h — плотность числом, среднее белое у стороны H,
-    тысячные кегля (0 — не задана); предел сдвига снят, порог почти нулевой."""
+    тысячные кегля (0 — не задана); предел сдвига снят, порог почти нулевой.
+    zero_scale — {группа: поправка} к угаданной плотности, которую мастеру
+    передал другой мастер (`auto._carry_zero`): тогда ни число, ни свои
+    образцы не в счёт."""
 
     def __init__(self, depth=0.07, overshoot=0.0, threshold=12, word_gap=0.47,
                  word_gap_slack=0.25, word_gap_edge=False, soft=False, plateau=0.03, tail=0.07,
                  shelter_slope=1.0, shelter_weight=0.0, serif_weight=0.75, serif_depth=0.08,
                  serif_flat=0.01, robust_heights=False, slant=False, cursive=False,
                  cursive_entry=0.04, cursive_body=0.6, even_density=False, figures=False,
-                 per_side=False, from_zero=False, side_h=0.0):
+                 per_side=False, from_zero=False, side_h=0.0, zero_scale=None):
         self.depth = depth
         self.overshoot = overshoot
         self.threshold = threshold
@@ -112,6 +115,7 @@ class SpacingRule:
         self.per_side = per_side
         self.from_zero = from_zero
         self.side_h = side_h
+        self.zero_scale = zero_scale
 
 
 class SpaceTarget:
@@ -185,8 +189,11 @@ class SpacingPlan:
         self.space = space
         self.from_zero = False   # расставлено с нуля (`SpacingRule.from_zero`)
         self.side_h = None       # белое у стороны H, тысячные кегля, если с нуля
-        self.side_source = None  # откуда плотность с нуля: "set" — число, "hand" — буквы, "guess" — форма
+        self.side_source = None  # откуда плотность с нуля: "set" — число, "hand" — буквы, "guess" — форма,
+                                 # "carried" — поправка от другого мастера
         self.side_letters = ()   # буквы, расставленные дизайнером, если плотность с них
+        self.zero_scale = {}     # с нуля: группа → эталон / угаданное (поправка этого мастера)
+        self.zero_stem = None    # с нуля: толщина штамба (доля роста) — место мастера на оси веса
 
     @property
     def threshold_units(self):
@@ -733,7 +740,7 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     с_нуля_вышло = None
     if с_нуля:
         с_нуля_вышло = _zero_targets(master, замеры, профили, rule.side_h * upm / 1000.0, рост, капитель,
-                                     рукописный)
+                                     рукописный, rule.zero_scale)
         if с_нуля_вышло is None:
             # плотность не задать (нет ни букв-образцов, ни форм для угадывания): правило как есть
             с_нуля, rule = False, своё_правило
@@ -888,19 +895,23 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
     if с_нуля_вышло is not None:
         план.side_h, план.side_source = с_нуля_вышло.side_h, с_нуля_вышло.source
         план.side_letters = с_нуля_вышло.letters
+        план.zero_scale, план.zero_stem = с_нуля_вышло.scale, с_нуля_вышло.stem
     return план
 
 
 class _ZeroTargets:
     """Эталоны с нуля: `targets` — группа → белое; `source` — "set", "hand"
     или "guess"; `letters` — буквы-образцы; `side_h` — то же как белое у
-    стороны H, тысячные кегля"""
-    __slots__ = ("targets", "source", "letters", "side_h")
+    стороны H, тысячные кегля; `scale` — группа → эталон / угаданное;
+    `stem` — толщина штамба, доля роста (место мастера на оси веса)"""
+    __slots__ = ("targets", "source", "letters", "side_h", "scale", "stem")
 
 
-def _zero_targets(master, замеры, профили, поле, рост, капитель, рукописный):
+def _zero_targets(master, замеры, профили, поле, рост, капитель, рукописный, масштаб=None):
     """Эталоны белого шрифту без своей расстановки, по старшинству:
 
+    0. `масштаб` — поправка к угаданному от другого мастера того же шрифта
+       (`auto._carry_zero`): число и свои образцы тогда не в счёт;
     1. `поле` (единицы шрифта, 0 — нет) — число из окна: H встаёт со средним
        белым у стороны `поле`, другие группы — с той же поправкой к тому, что
        вышло бы без числа;
@@ -944,14 +955,22 @@ def _zero_targets(master, замеры, профили, поле, рост, ка
             полоса[г] = median(высоты)
 
     угадано = {}
-    формы = zero.guess(master, рост, капитель, рукописный)
+    буквы = zero.shapes(master, рост, капитель)
+    формы = zero.guess(master, рост, капитель, рукописный, буквы)
     for регистр, г in группа.items():
         if формы.get(регистр) and г in полоса:
             угадано[г] = формы[регистр] * полоса[г]
 
     вышло = _ZeroTargets()
     вышло.targets, вышло.source, вышло.letters = dict(угадано), "guess", ()
-    ручные = zero.hand_spaced(master)
+    штамбы = [ф["штамб"] for ф in (буквы["lower"] or буквы["upper"]).values()]
+    вышло.stem = median(штамбы) if штамбы else None
+    if масштаб and угадано:
+        общая = sum(масштаб.values()) / len(масштаб)
+        вышло.targets = {г: т * масштаб.get(г, общая) for г, т in угадано.items()}
+        вышло.source = "carried"
+        поле = 0
+    ручные = {} if масштаб else zero.hand_spaced(master)
     своё = {}
     for з in замеры:
         стороны = ручные.get(з.имя)
@@ -980,6 +999,7 @@ def _zero_targets(master, замеры, профили, поле, рост, ка
         вышло.source = "set"
     if not вышло.targets:
         return None
+    вышло.scale = {г: вышло.targets[г] / у for г, у in угадано.items() if у > 0 and г in вышло.targets}
     вышло.side_h = None
     if прямая is not None and прямая.группа in вышло.targets:
         белое = (прямая.белоеСлева + прямая.белоеСправа) / 2.0

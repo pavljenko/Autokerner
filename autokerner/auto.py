@@ -2,10 +2,15 @@
 
 Перенос исходного правила на Python. Апроши — на каждом мастере своим
 расчётом; знак правится на всех мастерах, если выбился хоть на одном
-(иначе по оси вышла бы ступенька). Кернинг меряется по мастерам,
+(иначе по оси вышла бы ступенька). Шрифт без своей расстановки
+расставляется с нуля, и поправка к угаданной плотности одна на ось
+(`_carry_zero`). Кернинг меряется по мастерам,
 переписанным с новыми полями, классы — одни на все мастера, числа по
 каждому.
 """
+
+import copy
+import math
 
 from .kerning import KernLaw, KernRule, adjust_values, make_matrix, matrix_names, plan_variable
 from .spacing import SpacingRule, plan as spacing_plan
@@ -54,6 +59,52 @@ class AutoResult:
                 "truncated": k.truncated,
             },
         }
+
+
+def _along_stem(штамб, опоры):
+    """Поправка мастера со штамбом `штамб` по опорам [(штамб, {группа:
+    поправка})]: между опорами — в логарифмах по толщине штамба, за
+    крайними — как у крайней"""
+    опоры = sorted(опоры, key=lambda о: о[0])
+    if штамб <= опоры[0][0]:
+        return dict(опоры[0][1])
+    if штамб >= опоры[-1][0]:
+        return dict(опоры[-1][1])
+    for (ш1, п1), (ш2, п2) in zip(опоры, опоры[1:]):
+        if ш1 <= штамб <= ш2:
+            t = (штамб - ш1) / (ш2 - ш1) if ш2 > ш1 else 0.0
+            return {г: math.exp(math.log(п1.get(г, п2.get(г))) * (1 - t) + math.log(п2.get(г, п1.get(г))) * t)
+                    for г in set(п1) | set(п2)}
+    return dict(опоры[-1][1])
+
+
+def _carry_zero(masters, планы, правило, looseness, fixed):
+    """С нуля у нескольких мастеров: поправка к угаданной плотности — от
+    букв-образцов или числа из окна — одна на ось. Мастер с образцами (с
+    числом — средний по толщине штамба) держит свою плотность, остальные
+    берут его поправку к своей угаданной; между несколькими опорами
+    поправка идёт по толщине штамба. Иначе вес с образцами выбивался из
+    ряда, а число давало всем весам одно поле H (замер 26.10.2026)"""
+    нули = [w for w, п in enumerate(планы) if п.from_zero and п.zero_scale and п.zero_stem]
+    if len(нули) < 2:
+        return планы
+    if правило.side_h:
+        по_штамбу = sorted(нули, key=lambda w: планы[w].zero_stem)
+        опоры = [по_штамбу[(len(по_штамбу) - 1) // 2]]
+    else:
+        опоры = [w for w in нули if планы[w].side_source == "hand"]
+    if not опоры:
+        return планы
+    вышло = list(планы)
+    for w in нули:
+        if w in опоры:
+            continue
+        своё = copy.copy(правило)
+        своё.side_h = 0.0
+        своё.zero_scale = _along_stem(планы[w].zero_stem, [(планы[о].zero_stem, планы[о].zero_scale)
+                                                           for о in опоры])
+        вышло[w] = spacing_plan(masters[w], своё, looseness, fixed)
+    return вышло
 
 
 def _nbsp(masters, пробел, fixed):
@@ -108,6 +159,7 @@ def run(masters, spacing_rule=None, kern_rule=None, progress=None, kern=True, op
     for номер, мастер in enumerate(masters):
         say("апроши: мастер %d из %d" % (номер + 1, len(masters)))
         планы.append(spacing_plan(мастер, правило, looseness, fixed))
+    планы = _carry_zero(masters, планы, правило, looseness, fixed)
     правятся = set()
     if do_spacing:
         for план in планы:
