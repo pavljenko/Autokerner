@@ -1,5 +1,15 @@
 # Autokerner
 
+**Version 1.0.0 — FontLab 8 edition.**
+
+[Download the script ZIP](https://github.com/pavljenko/Autokerner/releases/download/v1.0.0/autokerner-v1.0.0.zip) · [Release notes](CHANGELOG.md) · [Latest release](https://github.com/pavljenko/Autokerner/releases/latest)
+
+1.0 keeps the existing spacing and kerning algorithms. It fixes the stale-result guard: changing a pair value, pair identity or kerning-class membership after Calculate now requires recalculation before Apply. Existing pairs and classes can be preserved with **Add to it**; arbitrary handwritten `kern` feature code is a separate representation and is removed on Apply as described under Limitations.
+
+Use it to propose spacing and fill missing kerning, then review the changes. It does not guarantee an optical improvement to a finished typeface. The FontLab 9 hybrid prototype is a separate, unpublished project and is not included here.
+
+Validation for this release: 106 automated tests; Calculate/Apply guard regression on Forum, Ledger and Kelly Slab in FontLab 9.0.9805. Historical editor coverage is FontLab 8.4.3 on macOS; a fresh FontLab 8 run was unavailable on the release machine. Windows is not verified.
+
 Spacing and kerning for FontLab 8, on all masters in one run.
 
 [Русская версия](README.ru.md)

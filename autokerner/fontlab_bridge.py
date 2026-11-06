@@ -303,16 +303,25 @@ class FontSource:
 
     def fingerprint(self, masters=None):
         """Слепок шрифта для проверки «не правили ли после расчёта»: имена
-        знаков, ширины на мастерах, число пар кернинга и знаки с цветной
+        знаков, ширины на мастерах, пары и классы кернинга и знаки с цветной
         меткой (пометил после расчёта — защита ещё не учтена)"""
+        мастера = list(masters or self.master_names)
         имена, ширины = [], []
         for g in self.font.glyphs:
             имена.append(g.name)
-            for m in masters or self.master_names:
+            for m in мастера:
                 слой = self.layer(g.name, m)
                 ширины.append(слой.advanceWidth if слой is not None else None)
-        пары = [len(self.package.kerning(m).keys()) for m in masters or self.master_names]
-        return (tuple(имена), tuple(ширины), tuple(пары), tuple(sorted(self.marked_names())))
+        кернинг = []
+        for m in мастера:
+            пары, классы = self.kerning_now(m)
+            # Снимок значений, а не только числа записей: ручная правка пары
+            # или состава класса должна запретить применение старого расчёта.
+            # Порядок выдачи API и порядок членов класса на значения не влияют.
+            состав = tuple(sorted((имя, tuple(sorted(знаки)), сторона)
+                                  for имя, (знаки, сторона) in классы.items()))
+            кернинг.append((m, tuple(sorted(пары)), состав))
+        return (tuple(имена), tuple(ширины), tuple(кернинг), tuple(sorted(self.marked_names())))
 
     def kerning_now(self, master):
         """Кернинг мастера как есть: (пары, классы).
