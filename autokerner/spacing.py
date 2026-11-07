@@ -1,7 +1,6 @@
 """Правило апрошей: сколько белого знак впускает в строку своим краем.
 
-Перенос правила апрошей исходной программы (Swift). Метод HT Letterspacer
-в её изложении: площадь белого
+Перенос собственного расчёта из Swift-версии Публикатора. Площадь белого
 у края знака меряется в полосе высот его группы (строчные, прописные,
 капитель), глубина учёта ограничена, эталон — медиана по этому же шрифту.
 Знаки препинания меряются иначе — против штамба прямой буквы; знак с
@@ -615,7 +614,7 @@ class _Measure:
                  "белоеСлева", "белоеСправа", "высотаСлева", "высотаСправа", "безКода")
 
 
-def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
+def plan(master, rule=None, looseness=0.0, fixed=frozenset(), component_metrics=False):
     """Замер и расчёт апрошей по мастеру.
 
     `looseness` — разрядка в долях: эталон белого у всех групп умножается
@@ -681,7 +680,7 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         if skipped(слева, контуры, advance) or skipped(справа, контуры, advance):
             continue
         базы = master.component_bases(i)
-        if базы:
+        if базы and not component_metrics:
             составные.append((i, код, базы))
             continue
         рамка = contours_rect(контуры)
@@ -720,7 +719,10 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         з.advance, з.lsb, з.rsb = advance, lsb, rsb
         з.белоеСлева, з.белоеСправа = левый[1], правый[2]
         з.высотаСлева, з.высотаСправа = левый[3], правый[3]
-        з.безКода = код is None
+        # In the FL9 route, measure resolved composite letters independently.
+        # Repeated accented forms must not overweight the reference median.
+        # This changes only the calculation model, never source components.
+        з.безКода = код is None or (component_metrics and bool(базы))
         замеры.append(з)
 
     # ── эталон: медиана площади белого по группе ──
@@ -731,7 +733,8 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         if not (слева + справа):
             continue
         эталоны[г] = median(слева + справа)
-    малые = [з for з in замеры if з.группа == SMALLCAP]
+    малые = [з for з in замеры if з.группа == SMALLCAP and not (
+        component_metrics and master.component_bases(master.by_name(з.имя)))]
     if len(малые) >= 8:
         эталоны[SMALLCAP] = median([з.белоеСлева for з in малые] + [з.белоеСправа for з in малые])
     elif UPPER in эталоны:
@@ -739,7 +742,9 @@ def plan(master, rule=None, looseness=0.0, fixed=frozenset()):
         эталоны[SMALLCAP] = эталоны[UPPER] * доля * доля
     с_нуля_вышло = None
     if с_нуля:
-        с_нуля_вышло = _zero_targets(master, замеры, профили, rule.side_h * upm / 1000.0, рост, капитель,
+        опорные_замеры = [з for з in замеры if not (
+            component_metrics and master.component_bases(master.by_name(з.имя)))]
+        с_нуля_вышло = _zero_targets(master, опорные_замеры, профили, rule.side_h * upm / 1000.0, рост, капитель,
                                      рукописный, rule.zero_scale)
         if с_нуля_вышло is None:
             # плотность не задать (нет ни букв-образцов, ни форм для угадывания): правило как есть

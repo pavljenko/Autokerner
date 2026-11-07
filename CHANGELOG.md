@@ -1,5 +1,30 @@
 # Changes / Изменения
 
+## 1.0.1 — 2026-11-07 · FontLab 8 / browser
+
+- Fix: independently changed composite-letter sidebearings are measured from
+  resolved outlines rather than inheriting only the base's delta. Components,
+  reference density, selected scope and protections are retained.
+- Reproduced in unmodified 1.0.0 on five real fonts; Karla is an outline-j control.
+  112 automated tests, one skipped, no failures. No fresh FontLab 8 runtime was
+  available; the same repair passed native Apply/read-back/Undo in FontLab 9.
+- Existing UI, Fine-tuning, RU/EN/DE, author/support links and kerning defaults retained.
+- Matching browser archive rebuilt. Updating this repository does not deploy the separate website.
+
+RU: исправлены апроши составных букв; прежний интерфейс и настройки сохранены.
+
+## FL9 0.1.0-beta.1 — 2026-11-07 · separate public beta
+
+- Full Classic interface plus independent native/own engine selection and comparison.
+- Preserving authored text-kern route, MM/VF export planning and supported original
+  avar persistence through normal VFJ Save. Unsupported constructs are blocked.
+- Same composite-letter fix. Six approved slides: interface, method and four local
+  examples, not a general engine ranking. Yanone g/j example withdrawn.
+- macOS FontLab 9.0.9806 coverage; Windows unverified. Preview does not shape
+  authored text kern; exact avar coverage is one-axis Nunito, v1.
+
+RU: отдельная бета гибрида FontLab 9; решение о применении остаётся за дизайнером.
+
 ## 1.0.0 — 2026-11-06
 
 - Stable FontLab 8 edition; the spacing and kerning algorithms are unchanged from 0.5.4.

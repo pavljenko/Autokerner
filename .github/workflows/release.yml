@@ -1,0 +1,52 @@
+name: Build and publish edition release
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'fl9-v*'
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build reproducible packages
+        run: |
+          set -euo pipefail
+          python3 tools/build_fontlab_script.py
+          python3 tools/build_web.py
+          python3 tools/build_fontlab9.py
+          python3 tools/package_release.py
+          cd dist/release
+          sha256sum --check SHA256SUMS.txt
+      - name: Publish tagged edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" == fl9-v* ]]; then
+            version="${RELEASE_TAG#fl9-v}"
+            test "$version" = "$(cat editions/fontlab9/VERSION)"
+            gh release create "$RELEASE_TAG" --verify-tag --prerelease --latest=false \
+              --title "Autokerner 9 Hybrid $version" \
+              --notes-file "docs/releases/$RELEASE_TAG.md" \
+              "dist/release/autokerner-fontlab9-v$version.zip" \
+              "dist/release/autokerner-fontlab9-slides-v$version.zip" \
+              dist/release/Autokerner9.py dist/release/SHA256SUMS-fontlab9.txt
+          else
+            version="${RELEASE_TAG#v}"
+            test "$version" = "$(python3 -c 'from autokerner import __version__; print(__version__)')"
+            gh release create "$RELEASE_TAG" --verify-tag --latest \
+              --title "Autokerner $version — FontLab 8" \
+              --notes-file "docs/releases/$RELEASE_TAG.md" \
+              "dist/release/autokerner-v$version.zip" \
+              "dist/release/autokerner-web-v$version.zip" \
+              dist/release/Autokerner.py dist/release/SHA256SUMS-fontlab8.txt
+          fi

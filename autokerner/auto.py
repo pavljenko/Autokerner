@@ -78,7 +78,7 @@ def _along_stem(штамб, опоры):
     return dict(опоры[-1][1])
 
 
-def _carry_zero(masters, планы, правило, looseness, fixed):
+def _carry_zero(masters, планы, правило, looseness, fixed, component_metrics=False):
     """С нуля у нескольких мастеров: поправка к угаданной плотности — от
     букв-образцов или числа из окна — одна на ось. Мастер с образцами (с
     числом — средний по толщине штамба) держит свою плотность, остальные
@@ -103,7 +103,8 @@ def _carry_zero(masters, планы, правило, looseness, fixed):
         своё.side_h = 0.0
         своё.zero_scale = _along_stem(планы[w].zero_stem, [(планы[о].zero_stem, планы[о].zero_scale)
                                                            for о in опоры])
-        вышло[w] = spacing_plan(masters[w], своё, looseness, fixed)
+        вышло[w] = spacing_plan(masters[w], своё, looseness, fixed,
+                                component_metrics=component_metrics)
     return вышло
 
 
@@ -129,7 +130,7 @@ def _nbsp(masters, пробел, fixed):
 
 
 def run(masters, spacing_rule=None, kern_rule=None, progress=None, kern=True, options=None,
-        fixed=()):
+        fixed=(), component_metrics=True):
     """Авторасчёт. `masters` — мастера одного шрифта (`model.Master`) с одним
     набором имён знаков; `progress(текст)` — сообщения о ходе (бросит
     исключение — расчёт прервётся).
@@ -158,8 +159,10 @@ def run(masters, spacing_rule=None, kern_rule=None, progress=None, kern=True, op
     планы = []
     for номер, мастер in enumerate(masters):
         say("апроши: мастер %d из %d" % (номер + 1, len(masters)))
-        планы.append(spacing_plan(мастер, правило, looseness, fixed))
-    планы = _carry_zero(masters, планы, правило, looseness, fixed)
+        планы.append(spacing_plan(мастер, правило, looseness, fixed,
+                                  component_metrics=component_metrics))
+    планы = _carry_zero(masters, планы, правило, looseness, fixed,
+                        component_metrics=component_metrics)
     правятся = set()
     if do_spacing:
         for план in планы:

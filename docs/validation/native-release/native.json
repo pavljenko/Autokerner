@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "error": null,
+  "reports": [
+    {
+      "font": "nunito",
+      "masters": [
+        "ExtraLight",
+        "Bold",
+        "ExtraBlack"
+      ],
+      "fl8_source_version": "1.0.1",
+      "fl9_source_version": "0.1.0-beta.1",
+      "same_spacing": true,
+      "fl8_packaged_bridge_apply_undo_exact": true,
+      "fl9_packaged_bridge_apply_undo_exact": true,
+      "fl8_bundle_sha256": "610c80fb0c02e394eef8da403bca59ea8f4d85d569f956e21dde92a337849611",
+      "runtime": "FontLab 9; not a new FontLab 8 runtime claim",
+      "background_guard": {
+        "policy": 2,
+        "hidden": true,
+        "onscreen_windows": [],
+        "passed": true
+      }
+    }
+  ],
+  "documents_after": 0,
+  "scratch_removed": true,
+  "bundle_sha256": "80f1b0db3a3cd6e8b6f98629a7706a82e68de41c4d62ca9abcc78515f72e5e19",
+  "background_restored": true
+}

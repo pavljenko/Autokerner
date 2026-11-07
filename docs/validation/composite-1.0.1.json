@@ -1,0 +1,71 @@
+{
+  "baseline_version": "1.0.0",
+  "new_version": "1.0.1",
+  "scope": "Editor-independent calculation on real TTF outlines; not a fresh FontLab 8 runtime test.",
+  "input": "Nominal 50/1000 em bearings; H/O/n/o and Cyrillic equivalents retained; selected Latin glyphs.",
+  "confirmed_composite_defect_fonts": 5,
+  "control_fonts": 1,
+  "passed": true,
+  "rows": [
+    {
+      "font": "yanonekaffeesatz",
+      "font_sha256": "2a8e71144fec88ffb803445d66b4ceec87ba7c6d48c754ae6ee5754b755a301d",
+      "composite_j": true,
+      "old_j_measured": false,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -162.0,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    },
+    {
+      "font": "alumnisans",
+      "font_sha256": "ef331e0594e32aca4f9bbfbbdc3cdc02164b67a0fb418cb03c44724176965d5a",
+      "composite_j": true,
+      "old_j_measured": false,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -111.0,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    },
+    {
+      "font": "merriweather",
+      "font_sha256": "ffa55f30d70819f39589e7206b8ae9d9073b20241474abc40dc3a60ab35ef50a",
+      "composite_j": true,
+      "old_j_measured": false,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -78.0,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    },
+    {
+      "font": "lora",
+      "font_sha256": "5a49d5cf35f623d63fc7a7460e062ec4e8bc28f7727ec0be5c4017a6428209c5",
+      "composite_j": true,
+      "old_j_measured": false,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -133.0,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    },
+    {
+      "font": "comfortaa",
+      "font_sha256": "1433d0af51a9a4292fd5330cd9b4489a324114e1d6c4b7ce4486f11775870ba1",
+      "composite_j": true,
+      "old_j_measured": false,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -152.0,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    },
+    {
+      "font": "karla",
+      "font_sha256": "92f4ee63733e505c7c0901331f8371b934d9e4c765c5b2abbb668cff32c1b956",
+      "composite_j": false,
+      "old_j_measured": true,
+      "new_j_measured": true,
+      "new_j_shift_em1000": -159.5,
+      "reference_density_unchanged": true,
+      "old_default_equals_new_legacy_switch": true
+    }
+  ]
+}
