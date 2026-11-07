@@ -42,6 +42,8 @@ Sasha Pavljenko · [pavljenko.ru](https://pavljenko.ru) ·
 [Сообщить об ошибке](https://github.com/pavljenko/Autokerner/issues) · pavljenko@ya.ru.
 [MIT](LICENSE). Права на шрифты остаются у их авторов.
 
+Разработано с помощью Claude и OpenAI Codex.
+
 Проверки FontLab 8.4.3/macOS — исторические. Расчёт 1.0.1 сверён с исходником
 1.0.0 на шести реальных шрифтах; исправление проверено также в FontLab 9.
 Свежий прогон в FontLab 8 недоступен. Windows не проверен.

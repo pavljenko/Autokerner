@@ -44,6 +44,8 @@ Sasha Pavljenko · [pavljenko.ru](https://pavljenko.ru) ·
 [Issues](https://github.com/pavljenko/Autokerner/issues) · pavljenko@ya.ru.
 Free and open source under [MIT](LICENSE). Processed fonts remain their authors'.
 
+Developed with assistance from Claude and OpenAI Codex.
+
 ## Source and builds
 
 - `autokerner/`: Classic/FontLab 8 and browser source.
